@@ -9,6 +9,7 @@ import urllib.request
 import urllib.error
 import http.cookiejar
 import xml.etree.ElementTree as ElementTree
+import xml.dom.minidom
 
 class SpectraLogicLoginError(Exception):
 
@@ -19,11 +20,12 @@ class SpectraLogicLoginError(Exception):
 
 class SpectraLogicAPI:
 
-    def __init__(self, server, user, passwd):
+    def __init__(self, server, user, passwd, verbose):
         self.server     = server
         self.baseurl    = "http://" + server + "/gf"
         self.user       = user
         self.passwd     = passwd
+        self.verbose    = verbose
         self.loggedin   = False
         self.sessionid  = ""
         self.cookiefile = self.slapidirectory() + "/cookies.txt"
@@ -72,13 +74,33 @@ class SpectraLogicAPI:
     def run_command(self, url):
 
         try:
-            print(url)
+
+            if self.verbose:
+                print("--------------------------------------------------")
+                print("Command: " + url)
+                print("--------------------------------------------------")
+                print("")
+
             opener    = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.cookiejar))
             opener.addheaders.append(("Cookie", "sessionID=" + self.sessionid))
             request   = urllib.request.Request(url)
             response  = opener.open(request)
             xmldoc    = response.read()
             tree      = ElementTree.fromstring(xmldoc)
+
+            if self.verbose:
+                print("--------------------------------------------------")
+                print("XML Document:")
+                xmlstr = xml.dom.minidom.parseString(xmldoc).toprettyxml(indent="   ")
+                xmllines = xmlstr.splitlines()
+                for line in xmllines:
+                    line = line.rstrip()
+                    if line != "":
+                        print(line)
+                
+                #print(xmlstr)
+                print("--------------------------------------------------")
+                print("")
 
             if tree.tag == "error":
                 for child in tree:
@@ -93,7 +115,10 @@ class SpectraLogicAPI:
         except SpectraLogicLoginError as e:
 
             try:
-                print("Loginerror: Raised: " + str(SpectraLogicLoginError.LoginErrorRaised))
+
+                if (self.verbose):
+                    print("Loginerror: Raised: " + str(SpectraLogicLoginError.LoginErrorRaised))
+
                 if SpectraLogicLoginError.LoginErrorRaised == False:
                     SpectraLogicLoginError.LoginErrorRaised = True
                     self.login()
@@ -129,7 +154,7 @@ class SpectraLogicAPI:
                 self.cookiejar.save(self.cookiefile, ignore_discard=True, ignore_expires=False)
 
         except Exception as e:
-            print("LOGIN: " + str(e))
+            print("Login Error: " + str(e))
 
     def logout(self):
 
@@ -138,7 +163,7 @@ class SpectraLogicAPI:
             tree = self.run_command(url)
 
         except Exception as e:
-            print(str(e))
+            print("Logout Error: " + str(e))
 
         self.loggedin  = False
         self.sessionid = ""
@@ -155,7 +180,7 @@ class SpectraLogicAPI:
                 print(child.tag + ": " + child.text)
 
         except Exception as e:
-            print("PARTLIST: " + str(e))
+            print("PartitionList Error: " + str(e))
 
     def inventorylist(self, partition):
 
@@ -186,7 +211,7 @@ class SpectraLogicAPI:
                         print('{:6} {:6} {:10} {:6} {:6}'.format(myid, offset, barcode, isqueued, full))
 
         except Exception as e:
-            print(str(e))
+            print("InventoryList Error: " + str(e))
     
 
 def usage():
@@ -260,10 +285,10 @@ def main():
         usage()
         sys.exit(1)
 
-    slapi = SpectraLogicAPI(server, user, passwd)
+    slapi = SpectraLogicAPI(server, user, passwd, verbose)
     #slapi.login()
-    slapi.partitionlist()
-    #slapi.inventorylist("NERF")
+    #slapi.partitionlist()
+    slapi.inventorylist("NERF")
     #slapi.logout()
 
 if __name__ == "__main__":

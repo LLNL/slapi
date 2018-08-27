@@ -76,10 +76,10 @@ class SpectraLogicAPI:
         try:
 
             if self.verbose:
-                print("--------------------------------------------------")
-                print("Command: " + url)
-                print("--------------------------------------------------")
-                print("")
+                print("--------------------------------------------------", file=sys.stderr)
+                print("Command: " + url, file=sys.stderr)
+                print("--------------------------------------------------", file=sys.stderr)
+                print("", file=sys.stderr)
 
             opener    = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.cookiejar))
             opener.addheaders.append(("Cookie", "sessionID=" + self.sessionid))
@@ -89,18 +89,16 @@ class SpectraLogicAPI:
             tree      = ElementTree.fromstring(xmldoc)
 
             if self.verbose:
-                print("--------------------------------------------------")
-                print("XML Document:")
+                print("--------------------------------------------------", file=sys.stderr)
+                print("XML Document:", file=sys.stderr)
                 xmlstr = xml.dom.minidom.parseString(xmldoc).toprettyxml(indent="   ")
                 xmllines = xmlstr.splitlines()
                 for line in xmllines:
                     line = line.rstrip()
                     if line != "":
-                        print(line)
-                
-                #print(xmlstr)
-                print("--------------------------------------------------")
-                print("")
+                        print(line, file=sys.stderr)
+                print("--------------------------------------------------", file=sys.stderr)
+                print("", file=sys.stderr)
 
             if tree.tag == "error":
                 for child in tree:
@@ -117,7 +115,7 @@ class SpectraLogicAPI:
             try:
 
                 if (self.verbose):
-                    print("Loginerror: Raised: " + str(SpectraLogicLoginError.LoginErrorRaised))
+                    print("Loginerror: Raised: " + str(SpectraLogicLoginError.LoginErrorRaised), file=sys.stderr)
 
                 if SpectraLogicLoginError.LoginErrorRaised == False:
                     SpectraLogicLoginError.LoginErrorRaised = True
@@ -146,7 +144,7 @@ class SpectraLogicAPI:
                     self.load_cookie()
 
             if self.loggedin == False:
-                print("Login Failed...\n")
+                print("Login Failed...\n", file=sys.stderr)
                 self.loggedin  = False
                 self.sessionid = ""
                 self.cookiejar.clear(self.server)
@@ -154,7 +152,7 @@ class SpectraLogicAPI:
                 self.cookiejar.save(self.cookiefile, ignore_discard=True, ignore_expires=False)
 
         except Exception as e:
-            print("Login Error: " + str(e))
+            print("Login Error: " + str(e), file=sys.stderr)
 
     def logout(self):
 
@@ -163,7 +161,7 @@ class SpectraLogicAPI:
             tree = self.run_command(url)
 
         except Exception as e:
-            print("Logout Error: " + str(e))
+            print("Logout Error: " + str(e), file=sys.stderr)
 
         self.loggedin  = False
         self.sessionid = ""
@@ -180,7 +178,7 @@ class SpectraLogicAPI:
                 print(child.tag + ": " + child.text)
 
         except Exception as e:
-            print("PartitionList Error: " + str(e))
+            print("PartitionList Error: " + str(e), file=sys.stderr)
 
     def inventorylist(self, partition):
 
@@ -211,7 +209,7 @@ class SpectraLogicAPI:
                         print('{:6} {:6} {:10} {:6} {:6}'.format(myid, offset, barcode, isqueued, full))
 
         except Exception as e:
-            print("InventoryList Error: " + str(e))
+            print("InventoryList Error: " + str(e), file=sys.stderr)
     
 
 def usage():
@@ -240,7 +238,7 @@ def main():
                                     "user=",
                                     "verbose"])
     except getopt.GetoptError as e:
-        print(str(e))
+        print(str(e), file=sys.stderr)
         sys.exit(1)
 
     for o, a in opts:

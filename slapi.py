@@ -1,14 +1,16 @@
 #!/usr/bin/python3
 
-import getopt
+import argparse
 import sys
 import os
+import stat
+import time
 import pathlib
 import configparser
 import urllib.request
 import urllib.error
 import http.cookiejar
-import xml.etree.ElementTree as ElementTree
+import xml.etree.ElementTree
 import xml.dom.minidom
 
 class SpectraLogicLoginError(Exception):
@@ -20,12 +22,12 @@ class SpectraLogicLoginError(Exception):
 
 class SpectraLogicAPI:
 
-    def __init__(self, server, user, passwd, verbose):
-        self.server     = server
-        self.baseurl    = "http://" + server + "/gf"
-        self.user       = user
-        self.passwd     = passwd
-        self.verbose    = verbose
+    def __init__(self, args):
+        self.server     = args.server
+        self.baseurl    = "http://" + args.server + "/gf"
+        self.user       = args.user
+        self.passwd     = args.passwd
+        self.verbose    = args.verbose
         self.loggedin   = False
         self.sessionid  = ""
         self.cookiefile = self.slapidirectory() + "/cookies.txt"
@@ -55,17 +57,38 @@ class SpectraLogicAPI:
             except OSError as e:
                 raise(e)
 
+    def cookie_is_old(self):
+
+        try:
+            now   = time.time()
+            mtime = os.stat(self.cookiefile)[stat.ST_MTIME]
+            age   = now - mtime
+            if age < 3600:
+                return(False)
+            else:
+                return(True)
+
+        except Exception as e:
+            return(True)
+
     def load_cookie(self):
 
         try:
             self.cookiejar.load(self.cookiefile, ignore_discard=True, ignore_expires=False)
             for cookie in self.cookiejar:
-                if cookie.domain == self.server and cookie.name == "sessionID" and not cookie.is_expired():
-                    self.sessionid = cookie.value
-                    self.loggedin = True
-                    return
+                if cookie.domain == self.server and cookie.name == "sessionID":
+                    if cookie.is_expired() or self.cookie_is_old():
+                        self.cookiejar.clear(self.server)
+                        os.umask(0o077)
+                        self.cookiejar.save(self.cookiefile, ignore_discard=True, ignore_expires=False)
+                        self.loggedin  = False
+                        self.sessionid = ""
+                    else:
+                        self.sessionid = cookie.value
+                        self.loggedin = True
+                        return
 
-        except (IOError):
+        except Exception as e:
             os.umask(0o077)
             self.cookiejar.save(self.cookiefile, ignore_discard=True, ignore_expires=False)
             self.loggedin  = False
@@ -86,7 +109,7 @@ class SpectraLogicAPI:
             request   = urllib.request.Request(url)
             response  = opener.open(request)
             xmldoc    = response.read()
-            tree      = ElementTree.fromstring(xmldoc)
+            tree      = xml.etree.ElementTree.fromstring(xmldoc)
 
             if self.verbose:
                 print("--------------------------------------------------", file=sys.stderr)
@@ -102,12 +125,15 @@ class SpectraLogicAPI:
 
             if tree.tag == "error":
                 for child in tree:
-                    if (child.tag.find("Error: No active session found.") < 0):
+                    if (child.text.find("Error: No active session found.") >= 0):
                         raise(SpectraLogicLoginError("Error: No active session found."))
                 
-                raise(Exception(xmldoc))
+                errstr = ""
+                for child in tree:
+                    errstr = errstr + child.tag + ": " + child.text + "\n"
+                raise(Exception(errstr))
             
-            tree = ElementTree.fromstring(xmldoc)
+            tree = xml.etree.ElementTree.fromstring(xmldoc)
             return(tree)
 
         except SpectraLogicLoginError as e:
@@ -212,82 +238,70 @@ class SpectraLogicAPI:
             print("InventoryList Error: " + str(e), file=sys.stderr)
     
 
-def usage():
-    progname = os.path.basename(__file__)
-    print("usage: " + progname)
-    print("          --config <configfile>")
-    print("          --server <tfin_ipaddr>")
-    print("          --user   <username>")
-    print("          --help")
-    print("          --verbose")
-
 def main():
-    helpme     = False
-    configfile = None
-    server     = None
-    user       = None
-    passwd     = None
-    verbose    = False
 
+    cmdparser     = argparse.ArgumentParser(description='Spectra Logic TFinity API Tool.')
+    cmdsubparsers = cmdparser.add_subparsers(title="commands", dest="command")
+
+    cmdparser.add_argument('--version', '-V', action='version', version='%(prog)s 1.0')
+
+    cmdparser.add_argument('--verbose', '-v', dest='verbose', action='store_true',
+                           help='Increase the verbosity for the output.')
+
+    cmdparser.add_argument('--config', '-c', dest='configfile', nargs='?',
+                           required=True,
+                           type=argparse.FileType('r'), default='/etc/slapi.cfg',
+                           help='Configuration file for Spectra Logic API..')
+
+    cmdparser.add_argument('--server', '-s', dest='server',
+                           required=True,
+                           help='IP Address/Hostname of Spectra Logic Library.')
+
+    cmdparser.add_argument('--user', '-u', dest='user',
+                           help='User name for Spectra Logic Library Login.')
+
+    cmdparser.add_argument('--passwd', '-p', dest='passwd',
+                           help='Password for Spectra Logic Library Login. ' +
+                                'Do not use this option if you care about security. ' +
+                                'Specify the password in the config file instead.')
+
+
+    partitionlist_parser = cmdsubparsers.add_parser('partitionlist',
+                                                    help='List all Spectra Logic Library partitions.')
+
+    inventorylist_parser = cmdsubparsers.add_parser('inventorylist',
+                                                    help='List inventory for the specified partition.')
+    inventorylist_parser.add_argument('partition', action='store', help='Spectra Logic Partition')
+
+    args = cmdparser.parse_args()
+
+    cfgparser = configparser.ConfigParser()
+    cfgparser.read(args.configfile.name)
     try:
-        opts, args = getopt.getopt(sys.argv[1:],
-                                   "hc:s:u:v",
-                                   ["help",
-                                    "config=",
-                                    "server=",
-                                    "user=",
-                                    "verbose"])
-    except getopt.GetoptError as e:
-        print(str(e), file=sys.stderr)
-        sys.exit(1)
-
-    for o, a in opts:
-        if o in ("-h", "--help"):
-            helpme = a
-        elif o in ("-c", "--config"):
-            configfile = a
-        elif o in ("-u", "--user"):
-            user = a
-        elif o in ("-s", "--server"):
-            server = a
-        elif o in ("-v", "--verbose"):
-            verbose = True
-
-    if configfile is None:
-        print("Please specify a config file", file=sys.stderr)
-        usage()
-        sys.exit(1)
-
-    parser = configparser.ConfigParser()
-    parser.read(configfile)
-    try:
-        config = parser[server]
+        config = cfgparser[args.server]
     except Exception as e:
-        config = parser["DEFAULT"]
+        config = cfgparser["DEFAULT"]
 
-    if user is None:
-        user   = config["username"]
-    if passwd is None:
-        passwd = config["password"]
-
-    if server is None:
-        print("Please specify an IP address", file=sys.stderr)
-        usage()
-        sys.exit(1)
-    if user is None:
-        print("Please specify a user name", file=sys.stderr)
-        usage()
-        sys.exit(1)
-    if passwd is None:
-        print("Please specify a password", file=sys.stderr)
-        usage()
+    try:
+        if args.user is None:
+           args.user   = config["username"]
+        if args.passwd is None:
+            args.passwd = config["password"]
+    except Exception as e:
+        cmdparser.print_help()
         sys.exit(1)
 
-    slapi = SpectraLogicAPI(server, user, passwd, verbose)
-    #slapi.login()
-    #slapi.partitionlist()
-    slapi.inventorylist("NERF")
-    #slapi.logout()
+    slapi = SpectraLogicAPI(args)
+    if args.command is None:
+        cmdparser.print_help()
+        sys.exit(1)
+    elif args.command == "partitionlist":
+        slapi.partitionlist()
+    elif args.command == "inventorylist":
+        slapi.inventorylist(args.partition)
+    else:
+        cmdparser.print_help()
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

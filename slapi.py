@@ -10,6 +10,7 @@ import configparser
 import urllib.request
 import urllib.error
 import http.cookiejar
+import ssl
 import xml.etree.ElementTree
 import xml.dom.minidom
 
@@ -24,15 +25,19 @@ class SpectraLogicAPI:
 
     def __init__(self, args):
         self.server     = args.server
-        self.baseurl    = "http://" + args.server + "/gf"
         self.user       = args.user
         self.passwd     = args.passwd
         self.verbose    = args.verbose
+        self.insecure   = args.insecure
         self.loggedin   = False
         self.sessionid  = ""
         self.cookiefile = self.slapidirectory() + "/cookies.txt"
         self.cookiejar  = http.cookiejar.LWPCookieJar()
         self.load_cookie()
+        self.baseurl    = "https://" + args.server + "/gf"
+        if self.insecure:
+            self.baseurl    = "http://" + args.server + "/gf"
+
 
     def slapidirectory(self):
 
@@ -104,6 +109,10 @@ class SpectraLogicAPI:
                 print("--------------------------------------------------", file=sys.stderr)
                 print("", file=sys.stderr)
 
+            # FIXME someday...
+            # The libraries currently use self-signed certs
+            # Do not verify the certificate for now...
+            ssl._create_default_https_context = ssl._create_unverified_context
             opener    = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.cookiejar))
             opener.addheaders.append(("Cookie", "sessionID=" + self.sessionid))
             request   = urllib.request.Request(url)
@@ -247,6 +256,9 @@ def main():
 
     cmdparser.add_argument('--verbose', '-v', dest='verbose', action='store_true',
                            help='Increase the verbosity for the output.')
+
+    cmdparser.add_argument('--insecure', '-i', dest='insecure', action='store_true',
+                           help='Talk to library over http:// instead of https://')
 
     cmdparser.add_argument('--config', '-c', dest='configfile', nargs='?',
                            required=True,

@@ -215,6 +215,38 @@ class SpectraLogicAPI:
         except Exception as e:
             print("PartitionList Error: " + str(e), file=sys.stderr)
 
+    def etherlibstatus(self):
+
+        try:
+            url  = self.baseurl + "/etherLibStatus.xml?action=list"
+            tree = self.run_command(url)
+            for child in tree:
+                print (child.tag + ":" + child.text.rstrip())
+                for grandchild in child:
+                    print("  " + grandchild.tag + ":" + grandchild.text.rstrip())
+                    for ggrandchild in grandchild:
+                        print("    " + ggrandchild.tag + ": " + ggrandchild.text.rstrip())
+            #iter_ = tree.getiterator()
+            #for elem in iter_:
+            #    #print (elem.tag)
+            #    for child in elem:
+            #       print ("  " + child.tag + ":" + child.text.rstrip()) 
+                    
+            #appointments = tree.getchildren()
+            #for appointment in appointments:
+            #    appt_children = appointment.getchildren()
+            #    for appt_child in appt_children:
+            #        print (appt_child.tag + ":" + appt_child.text)
+
+            #for elem in tree.iter():
+            #    print (elem.tag, elem.attrib, elem.text)
+            #for target in tree.iter('target'):
+            #    print ("hello" + target.text)
+            #print(tree.tag)
+
+        except Exception as e:
+            print("EtherLibStatus Error: " + str(e), file=sys.stderr)
+
     def inventorylist(self, partition):
 
         try:
@@ -245,6 +277,7 @@ class SpectraLogicAPI:
 
         except Exception as e:
             print("InventoryList Error: " + str(e), file=sys.stderr)
+    
     
 
 def main():
@@ -280,6 +313,9 @@ def main():
 
     partitionlist_parser = cmdsubparsers.add_parser('partitionlist',
                                                     help='List all Spectra Logic Library partitions.')
+    
+    etherlibstatus_parser = cmdsubparsers.add_parser('etherlibstatus',
+                                                    help='Retrieve status of the library EtherLib connections.')
 
     inventorylist_parser = cmdsubparsers.add_parser('inventorylist',
                                                     help='List inventory for the specified partition.')
@@ -309,6 +345,8 @@ def main():
         sys.exit(1)
     elif args.command == "partitionlist":
         slapi.partitionlist()
+    elif args.command == "etherlibstatus":
+        slapi.etherlibstatus()
     elif args.command == "inventorylist":
         slapi.inventorylist(args.partition)
     else:

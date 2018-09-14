@@ -247,6 +247,22 @@ class SpectraLogicAPI:
         except Exception as e:
             print("EtherLibStatus Error: " + str(e), file=sys.stderr)
 
+    def controllerslist(self):
+
+        try:
+            url  = self.baseurl + "/controllers.xml?action=list"
+            tree = self.run_command(url)
+            for child in tree:
+                print (child.tag + ":" + child.text.rstrip())
+                for grandchild in child:
+                    print("  " + grandchild.tag + ":" + grandchild.text.rstrip())
+                    for ggrandchild in grandchild:
+                        print("    " + ggrandchild.tag + ": " + ggrandchild.text.rstrip())
+
+        except Exception as e:
+            print("ControllersList Error: " + str(e), file=sys.stderr)
+
+
     def inventorylist(self, partition):
 
         try:
@@ -317,6 +333,9 @@ def main():
     etherlibstatus_parser = cmdsubparsers.add_parser('etherlibstatus',
                                                     help='Retrieve status of the library EtherLib connections.')
 
+    controllerslist_parser = cmdsubparsers.add_parser('controllerslist',
+                                                    help='Returns controller status, type, firmware, and failover and port information.')
+
     inventorylist_parser = cmdsubparsers.add_parser('inventorylist',
                                                     help='List inventory for the specified partition.')
     inventorylist_parser.add_argument('partition', action='store', help='Spectra Logic Partition')
@@ -347,6 +366,8 @@ def main():
         slapi.partitionlist()
     elif args.command == "etherlibstatus":
         slapi.etherlibstatus()
+    elif args.command == "controllerslist":
+        slapi.controllerslist()
     elif args.command == "inventorylist":
         slapi.inventorylist(args.partition)
     else:

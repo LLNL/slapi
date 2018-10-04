@@ -136,12 +136,12 @@ class SpectraLogicAPI:
                 for child in tree:
                     if (child.text.find("Error: No active session found.") >= 0):
                         raise(SpectraLogicLoginError("Error: No active session found."))
-                
+
                 errstr = ""
                 for child in tree:
                     errstr = errstr + child.tag + ": " + child.text + "\n"
                 raise(Exception(errstr))
-            
+
             tree = xml.etree.ElementTree.fromstring(xmldoc)
             return(tree)
 
@@ -161,12 +161,80 @@ class SpectraLogicAPI:
 
             except Exception as e:
                 raise(e)
-            
+
         except Exception as e:
             raise(e)
-            
-            
 
+
+    #==========================================================================
+    # DEFINE COMMAND FUNCTIONS
+    #==========================================================================
+
+
+    #--------------------------------------------------------------------------
+    #
+    # Returns controller status, type, firmware, failover configuration, and
+    # port configuration information for all controllers in the library.
+    #
+    def controllerslist(self):
+
+        try:
+            url  = self.baseurl + "/controllers.xml?action=list"
+            tree = self.run_command(url)
+            for child in tree:
+                print (child.tag + ":" + child.text.rstrip())
+                for grandchild in child:
+                    print("  " + grandchild.tag + ":" + grandchild.text.rstrip())
+                    for ggrandchild in grandchild:
+                        print("    " + ggrandchild.tag + ": " + ggrandchild.text.rstrip())
+
+        except Exception as e:
+            print("ControllersList Error: " + str(e), file=sys.stderr)
+
+    #--------------------------------------------------------------------------
+    #
+    # Retrieves the EtherLib status information gathered with the refresh
+    # action.
+    #
+    def etherlibstatus(self):
+
+        try:
+            url  = self.baseurl + "/etherLibStatus.xml?action=list"
+            tree = self.run_command(url)
+            for child in tree:
+                print (child.tag + ":" + child.text.rstrip())
+                for grandchild in child:
+                    print("  " + grandchild.tag + ":" + grandchild.text.rstrip())
+                    for ggrandchild in grandchild:
+                        print("    " + ggrandchild.tag + ": " + ggrandchild.text.rstrip())
+            #iter_ = tree.getiterator()
+            #for elem in iter_:
+            #    #print (elem.tag)
+            #    for child in elem:
+            #       print ("  " + child.tag + ":" + child.text.rstrip())
+
+            #appointments = tree.getchildren()
+            #for appointment in appointments:
+            #    appt_children = appointment.getchildren()
+            #    for appt_child in appt_children:
+            #        print (appt_child.tag + ":" + appt_child.text)
+
+            #for elem in tree.iter():
+            #    print (elem.tag, elem.attrib, elem.text)
+            #for target in tree.iter('target'):
+            #    print ("hello" + target.text)
+            #print(tree.tag)
+
+        except Exception as e:
+            print("EtherLibStatus Error: " + str(e), file=sys.stderr)
+
+    #--------------------------------------------------------------------------
+    #
+    # Connects to the library using the specified username and password. See
+    # "Configuring Library Users" in your library User Guide for information
+    # about configuring users and passwords, as well as information about what
+    # sort of actions each user type can perform.
+    #
     def login(self):
 
         try:
@@ -189,6 +257,10 @@ class SpectraLogicAPI:
         except Exception as e:
             print("Login Error: " + str(e), file=sys.stderr)
 
+    #--------------------------------------------------------------------------
+    #
+    # Closes the connection to the library.
+    #
     def logout(self):
 
         try:
@@ -204,65 +276,15 @@ class SpectraLogicAPI:
         os.umask(0o077)
         self.cookiejar.save(self.cookiefile, ignore_discard=True, ignore_expires=False)
 
-    def partitionlist(self):
-
-        try:
-            url  = self.baseurl + "/partitionList.xml"
-            tree = self.run_command(url)
-            for child in tree:
-                print(child.tag + ": " + child.text)
-
-        except Exception as e:
-            print("PartitionList Error: " + str(e), file=sys.stderr)
-
-    def etherlibstatus(self):
-
-        try:
-            url  = self.baseurl + "/etherLibStatus.xml?action=list"
-            tree = self.run_command(url)
-            for child in tree:
-                print (child.tag + ":" + child.text.rstrip())
-                for grandchild in child:
-                    print("  " + grandchild.tag + ":" + grandchild.text.rstrip())
-                    for ggrandchild in grandchild:
-                        print("    " + ggrandchild.tag + ": " + ggrandchild.text.rstrip())
-            #iter_ = tree.getiterator()
-            #for elem in iter_:
-            #    #print (elem.tag)
-            #    for child in elem:
-            #       print ("  " + child.tag + ":" + child.text.rstrip()) 
-                    
-            #appointments = tree.getchildren()
-            #for appointment in appointments:
-            #    appt_children = appointment.getchildren()
-            #    for appt_child in appt_children:
-            #        print (appt_child.tag + ":" + appt_child.text)
-
-            #for elem in tree.iter():
-            #    print (elem.tag, elem.attrib, elem.text)
-            #for target in tree.iter('target'):
-            #    print ("hello" + target.text)
-            #print(tree.tag)
-
-        except Exception as e:
-            print("EtherLibStatus Error: " + str(e), file=sys.stderr)
-
-    def controllerslist(self):
-
-        try:
-            url  = self.baseurl + "/controllers.xml?action=list"
-            tree = self.run_command(url)
-            for child in tree:
-                print (child.tag + ":" + child.text.rstrip())
-                for grandchild in child:
-                    print("  " + grandchild.tag + ":" + grandchild.text.rstrip())
-                    for ggrandchild in grandchild:
-                        print("    " + ggrandchild.tag + ": " + ggrandchild.text.rstrip())
-
-        except Exception as e:
-            print("ControllersList Error: " + str(e), file=sys.stderr)
-
-
+    #--------------------------------------------------------------------------
+    #
+    # Lists all storage slots, entry/exit slots, and drives in the specified
+    # partition.
+    # - For each slot and drive, the list indicates whether or not it is full.
+    # - For each occupied slot or drive, the list also indicates the barcode
+    #   information of the cartridge and whether or not the cartridge is queued
+    #   for eject.
+    #
     def inventorylist(self, partition):
 
         try:
@@ -293,9 +315,95 @@ class SpectraLogicAPI:
 
         except Exception as e:
             print("InventoryList Error: " + str(e), file=sys.stderr)
-    
-    
 
+    #--------------------------------------------------------------------------
+    #
+    # Returns the library type, serial number, component status, and engineering
+    # change level information for the library that received the command.
+    #
+    def librarystatus(self):
+
+        try:
+            url  = self.baseurl + "/libraryStatus.xml"
+            tree = self.run_command(url)
+            for child in tree:
+                if ( (child.tag == "robot") or
+                     (child.tag == "excessiveMoveFailures") ):
+                    print (child.tag + ":", end='')
+                    for item in child:
+                        print (" ", end='')
+                        print (item.tag, item.text, sep='=', end='')
+                    print () #newline
+                elif (child.tag == "controllerEnvironmentInfo"):
+                    for cei in child:
+                        if ( (cei.tag == "controller") or
+                             (cei.tag == "driveControlModule") or
+                             (cei.tag == "serviceBayControlModule") ):
+                            print (cei.tag + ":", end='')
+                            for item in cei:
+                                print (" ", end='')
+                                print (item.tag, item.text, sep='=', end='')
+                            print () #newline
+                        elif ( (cei.tag == "powerSupplyFRU") or
+                               (cei.tag == "powerControlModule") or
+                               (cei.tag == "fanControlModule") or
+                               (cei.tag == "frameManagementModule") ):
+                            print (cei.tag + ":", end='')
+                            for item in cei:
+                                print (" ", end='')
+                                if ( (item.tag == "fanInPowerSupplyFRU") or
+                                     (item.tag == "powerSupplyInPowerSupplyFRU") or
+                                     (item.tag == "powerSupplyInPCM") or
+                                     (item.tag == "fanInFCM") or
+                                     (item.tag == "lightBank") or
+                                     (item.tag == "fanPair") or
+                                     (item.tag == "fanInFMM") or
+                                     (item.tag == "powerSupplyInFMM") ):
+                                    print (item.tag + "=(", end='')
+                                    count = 0
+                                    for subitem in item:
+                                        if (count > 0):
+                                            print (" ", end='')
+                                        print (subitem.tag, subitem.text, sep='=', end='')
+                                        count = count + 1
+                                    print (")", end='')
+                                else:
+                                    print (item.tag, item.text, sep='=', end='')
+                            print () #newline
+                elif (child.tag == "ECInfo"):
+                    for component in child:
+                        print (child.tag, component.tag, sep=': ', end='')
+                        for item in component:
+                            print (item.tag, item.text, sep='=', end='')
+                            print (" ", end='')
+                        print () #newline
+                else:
+                    print (child.tag, child.text, sep='=')
+
+        except Exception as e:
+            print("LibraryStatus Error: " + str(e), file=sys.stderr)
+
+    #--------------------------------------------------------------------------
+    #
+    # Returns a list of all the partitions configured in the library.
+    #
+    # **Note** This command is different from "partition.xml?action=list"
+    #          which lists all existing partitions including details such as
+    #          partition type, size, assigned drives, etc.
+    #
+    def partitionlist(self):
+
+        try:
+            url  = self.baseurl + "/partitionList.xml"
+            tree = self.run_command(url)
+            for child in tree:
+                print(child.tag + ": " + child.text)
+
+        except Exception as e:
+            print("PartitionList Error: " + str(e), file=sys.stderr)
+
+
+#==============================================================================
 def main():
 
     cmdparser     = argparse.ArgumentParser(description='Spectra Logic TFinity API Tool.')
@@ -327,18 +435,21 @@ def main():
                                 'Specify the password in the config file instead.')
 
 
-    partitionlist_parser = cmdsubparsers.add_parser('partitionlist',
-                                                    help='List all Spectra Logic Library partitions.')
-    
+    controllerslist_parser = cmdsubparsers.add_parser('controllerslist',
+                                                    help='Returns controller status, type, firmware, and failover and port information.')
+
     etherlibstatus_parser = cmdsubparsers.add_parser('etherlibstatus',
                                                     help='Retrieve status of the library EtherLib connections.')
 
-    controllerslist_parser = cmdsubparsers.add_parser('controllerslist',
-                                                    help='Returns controller status, type, firmware, and failover and port information.')
+    partitionlist_parser = cmdsubparsers.add_parser('partitionlist',
+                                                    help='List all Spectra Logic Library partitions.')
 
     inventorylist_parser = cmdsubparsers.add_parser('inventorylist',
                                                     help='List inventory for the specified partition.')
     inventorylist_parser.add_argument('partition', action='store', help='Spectra Logic Partition')
+
+    librarystatus_parser = cmdsubparsers.add_parser('librarystatus',
+                                                    help='Returns library type, serial number, component status and engineering change level information.')
 
     args = cmdparser.parse_args()
 
@@ -362,14 +473,16 @@ def main():
     if args.command is None:
         cmdparser.print_help()
         sys.exit(1)
-    elif args.command == "partitionlist":
-        slapi.partitionlist()
-    elif args.command == "etherlibstatus":
-        slapi.etherlibstatus()
     elif args.command == "controllerslist":
         slapi.controllerslist()
+    elif args.command == "etherlibstatus":
+        slapi.etherlibstatus()
     elif args.command == "inventorylist":
         slapi.inventorylist(args.partition)
+    elif args.command == "librarystatus":
+        slapi.librarystatus()
+    elif args.command == "partitionlist":
+        slapi.partitionlist()
     else:
         cmdparser.print_help()
         sys.exit(1)

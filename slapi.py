@@ -29,6 +29,7 @@ class SpectraLogicAPI:
         self.passwd     = args.passwd
         self.verbose    = args.verbose
         self.insecure   = args.insecure
+        self.longlist   = args.longlist
         self.loggedin   = False
         self.sessionid  = ""
         self.cookiefile = self.slapidirectory() + "/cookies.txt"
@@ -99,6 +100,34 @@ class SpectraLogicAPI:
             self.loggedin  = False
             self.sessionid = ""
 
+    #--------------------------------------------------------------------------
+    #
+    # Prints xml output as a one item per line hierarchy. Similar to XML output,
+    # but without all the XML markup.
+    #
+    def longlisting(self, element, level):
+
+        # add two spaces for each level
+        for i in range(level):
+            print ("  ", end='')
+
+        # print the name of the element
+        print (element.tag, end='')
+
+        # print the text of the element; "None" if no text
+        if element.text:
+            print (": " + element.text.rstrip())
+        else:
+            print (": None")
+
+        # recurse to the next level of elements
+        for subelem in element:
+            self.longlisting(subelem, (level+1))
+
+    #--------------------------------------------------------------------------
+    #
+    # Runs the XML comand
+    #
     def run_command(self, url):
 
         try:
@@ -166,6 +195,8 @@ class SpectraLogicAPI:
             raise(e)
 
 
+
+
     #==========================================================================
     # DEFINE COMMAND FUNCTIONS
     #==========================================================================
@@ -181,6 +212,10 @@ class SpectraLogicAPI:
         try:
             url  = self.baseurl + "/controllers.xml?action=list"
             tree = self.run_command(url)
+            if self.longlist:
+                self.longlisting(tree, 0)
+                return
+#TBD: the below is basically doing a long list...do we still need?
             for child in tree:
                 print (child.tag + ":" + child.text.rstrip())
                 for grandchild in child:
@@ -201,6 +236,10 @@ class SpectraLogicAPI:
         try:
             url  = self.baseurl + "/etherLibStatus.xml?action=list"
             tree = self.run_command(url)
+            if self.longlist:
+                self.longlisting(tree, 0)
+                return
+#TBD: the below is basically doing a long list...do we still need?
             for child in tree:
                 print (child.tag + ":" + child.text.rstrip())
                 for grandchild in child:
@@ -290,6 +329,9 @@ class SpectraLogicAPI:
         try:
             url       = self.baseurl + "/inventory.xml?action=list&partition=" + partition
             tree      = self.run_command(url)
+            if self.longlist:
+                self.longlisting(tree, 0)
+                return
             for part in tree:
                 print('{:6} {:6} {:10} {:6} {:6}'.format("ID", "Offset", "Barcode", "Queued", "Full"))
                 print('{:6} {:6} {:10} {:6} {:6}'.format("--", "------", "-------", "------", "----"))
@@ -316,6 +358,7 @@ class SpectraLogicAPI:
         except Exception as e:
             print("InventoryList Error: " + str(e), file=sys.stderr)
 
+
     #--------------------------------------------------------------------------
     #
     # Returns the library type, serial number, component status, and engineering
@@ -326,6 +369,9 @@ class SpectraLogicAPI:
         try:
             url  = self.baseurl + "/libraryStatus.xml"
             tree = self.run_command(url)
+            if self.longlist:
+                self.longlisting(tree, 0)
+                return
             for child in tree:
                 if ( (child.tag == "robot") or
                      (child.tag == "excessiveMoveFailures") ):
@@ -378,7 +424,8 @@ class SpectraLogicAPI:
                             print (" ", end='')
                         print () #newline
                 else:
-                    print (child.tag, child.text, sep='=')
+                    #print (child.tag, child.text, sep='=')
+                    print (child.tag, child.text, sep=': ')
 
         except Exception as e:
             print("LibraryStatus Error: " + str(e), file=sys.stderr)
@@ -396,6 +443,10 @@ class SpectraLogicAPI:
         try:
             url  = self.baseurl + "/partitionList.xml"
             tree = self.run_command(url)
+            if self.longlist:
+                self.longlisting(tree, 0)
+                return
+#TBD: the below is basically doing a long list...do we still need?
             for child in tree:
                 print(child.tag + ": " + child.text)
 
@@ -413,6 +464,11 @@ def main():
 
     cmdparser.add_argument('--verbose', '-v', dest='verbose', action='store_true',
                            help='Increase the verbosity for the output.')
+
+    cmdparser.add_argument('--longlist', '-l', dest='longlist', action='store_true',
+                           help='Format the output as a long listing; one     \
+                           attribute per line. Easier for the human eye; but  \
+                           difficult to parse.')
 
     cmdparser.add_argument('--insecure', '-i', dest='insecure', action='store_true',
                            help='Talk to library over http:// instead of https://')
@@ -441,15 +497,16 @@ def main():
     etherlibstatus_parser = cmdsubparsers.add_parser('etherlibstatus',
                                                     help='Retrieve status of the library EtherLib connections.')
 
-    partitionlist_parser = cmdsubparsers.add_parser('partitionlist',
-                                                    help='List all Spectra Logic Library partitions.')
-
     inventorylist_parser = cmdsubparsers.add_parser('inventorylist',
                                                     help='List inventory for the specified partition.')
     inventorylist_parser.add_argument('partition', action='store', help='Spectra Logic Partition')
 
     librarystatus_parser = cmdsubparsers.add_parser('librarystatus',
                                                     help='Returns library type, serial number, component status and engineering change level information.')
+
+    partitionlist_parser = cmdsubparsers.add_parser('partitionlist',
+                                                    help='List all Spectra Logic Library partitions.')
+
 
     args = cmdparser.parse_args()
 

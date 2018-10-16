@@ -228,6 +228,113 @@ class SpectraLogicAPI:
 
     #--------------------------------------------------------------------------
     #
+    # Returns detailed information about each of the drives in the library.
+    #
+    def drivelist(self):
+
+        driveFormat = '{:25} {:11} {:8} {:12} {:25} {:15} {:15} {:13} {:11} {:25} {:9} {:7} {:6} {:10} {:8} {:14} {:15}'
+
+        try:
+            url  = self.baseurl + "/driveList.xml?action=list"
+            tree = self.run_command(url)
+            if self.longlist:
+                self.longlisting(tree, 0)
+                return
+            print(driveFormat. \
+                format("ID", "DriveStatus", "Parition",
+                       "PartDriveNum", "DriveType",
+                       "SerialNum", "MfrSerialNum", "DriveFirmware",
+                       "DCMFirmware", "WWN", "FibreAddr",
+                       "LoopNum", "Health",
+                       "SparedWith", "SpareFor", "SparePotential",
+                       "FirmwareStaging"))
+            print(driveFormat. \
+                format("-------------------------", "-----------", "--------",
+                       "------------", "-------------------------",
+                       "---------------", "---------------", "-------------",
+                       "-----------", "-------------------------", "---------",
+                       "-------", "------",
+                       "----------", "--------", "--------------",
+                       "---------------"))
+            for drive in tree:
+                myid = ""
+                status = ""
+                partition = ""
+                paritionDriveNum = ""
+                driveType = ""
+                serialNum = ""
+                manuSerialNum = ""
+                driveFW = ""
+                dcmFW = ""
+                wwn = ""
+                fibreAddress = ""
+                loopNum = ""
+                health = ""
+                sparedWith = spareFor = sparePotential = ""
+                firmwareStaging = ""
+                for element in drive:
+                    if element.tag == "ID":
+                        myid = element.text.rstrip()
+                    elif element.tag == "driveStatus":
+                        status = element.text.rstrip()
+                    elif element.tag == "partition":
+                        partition = element.text.rstrip()
+                    elif element.tag == "partitionDriveNumber":
+                        paritionDriveNum = element.text.rstrip()
+                    elif element.tag == "driveType":
+                        driveType = element.text.rstrip()
+                    elif element.tag == "serialNumber":
+                        serialNum = element.text.rstrip()
+                    elif element.tag == "manufacturerSerialNumber":
+                        manuSerialNum = element.text.rstrip()
+                    elif element.tag == "driveFirmware":
+                        driveFW = element.text.rstrip()
+                    elif element.tag == "dcmFirmware":
+                        dcmFW = element.text.rstrip()
+                    elif element.tag == "wwn":
+                        wwn = element.text.rstrip()
+                    elif element.tag == "fibreAddress":
+                        fibreAddress = element.text.rstrip()
+                    elif element.tag == "loopNumber":
+                        loopNum = element.text.rstrip()
+                    elif element.tag == "health":
+                        health = element.text.rstrip()
+                    #TODO: wasn't able to test sparedWith, spareFor, sparePotential
+                    elif element.tag == "sparedWith":
+                        sparedWith = element.text.rstrip()
+                    elif element.tag == "spareFor":
+                        spareFor = element.text.rstrip()
+                    elif element.tag == "sparePotential":
+                        sparePotential = element.text.rstrip()
+                    #TODO: wasn't able to test firmwareStaging
+                    elif element.tag == "firmwareStaging":
+                        firmware = complete = percentStaged = committing = ""
+                        for item in element:
+                            if item.tag == "firmware":
+                                firmware = item.text.rstrip()
+                            elif item.tag == "complete":
+                                complete = item.text.rstrip()
+                            elif item.tag == "percentStaged":
+                                percentStaged = item.text.rstrip()
+                            elif item.tag == "committing":
+                                committing = item.text.rstrip()
+                        firmwareStaging = firmware + ":" \
+                                            " complete=" + complete + \
+                                            " %Staged=" + percentStaged + \
+                                            " committing=" + committing
+
+                print(driveFormat. \
+                    format(myid, status, partition, paritionDriveNum, driveType,
+                           serialNum, manuSerialNum, driveFW,
+                           dcmFW, wwn, fibreAddress, loopNum, health,
+                           sparedWith, spareFor, sparePotential,
+                           firmwareStaging) )
+
+        except Exception as e:
+            print("DriveList Error: " + str(e), file=sys.stderr)
+
+    #--------------------------------------------------------------------------
+    #
     # Retrieves the EtherLib status information gathered with the refresh
     # action.
     #
@@ -492,20 +599,23 @@ def main():
 
 
     controllerslist_parser = cmdsubparsers.add_parser('controllerslist',
-                                                    help='Returns controller status, type, firmware, and failover and port information.')
+        help='Returns controller status, type, firmware, and failover and port information.')
+
+    drivelist_parser = cmdsubparsers.add_parser('drivelist',
+        help='Returns detailed information about each of the drives in the library.')
 
     etherlibstatus_parser = cmdsubparsers.add_parser('etherlibstatus',
-                                                    help='Retrieve status of the library EtherLib connections.')
+        help='Retrieve status of the library EtherLib connections.')
 
     inventorylist_parser = cmdsubparsers.add_parser('inventorylist',
-                                                    help='List inventory for the specified partition.')
+        help='List inventory for the specified partition.')
     inventorylist_parser.add_argument('partition', action='store', help='Spectra Logic Partition')
 
     librarystatus_parser = cmdsubparsers.add_parser('librarystatus',
-                                                    help='Returns library type, serial number, component status and engineering change level information.')
+        help='Returns library type, serial number, component status and engineering change level information.')
 
     partitionlist_parser = cmdsubparsers.add_parser('partitionlist',
-                                                    help='List all Spectra Logic Library partitions.')
+        help='List all Spectra Logic Library partitions.')
 
 
     args = cmdparser.parse_args()
@@ -532,6 +642,8 @@ def main():
         sys.exit(1)
     elif args.command == "controllerslist":
         slapi.controllerslist()
+    elif args.command == "drivelist":
+        slapi.drivelist()
     elif args.command == "etherlibstatus":
         slapi.etherlibstatus()
     elif args.command == "inventorylist":

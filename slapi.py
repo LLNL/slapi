@@ -100,6 +100,7 @@ class SpectraLogicAPI:
             self.loggedin  = False
             self.sessionid = ""
 
+
     #--------------------------------------------------------------------------
     #
     # Prints xml output as a one item per line hierarchy. Similar to XML output,
@@ -109,20 +110,21 @@ class SpectraLogicAPI:
 
         # add two spaces for each level
         for i in range(level):
-            print ("  ", end='')
+            print("  ", end='')
 
         # print the name of the element
-        print (element.tag, end='')
+        print(element.tag, end='')
 
         # print the text of the element; "None" if no text
         if element.text:
-            print (": " + element.text.rstrip())
+            print(": " + element.text.rstrip())
         else:
-            print (": None")
+            print(": None")
 
         # recurse to the next level of elements
         for subelem in element:
             self.longlisting(subelem, (level+1))
+
 
     #--------------------------------------------------------------------------
     #
@@ -217,7 +219,7 @@ class SpectraLogicAPI:
                 return
 #TBD: the below is basically doing a long list...do we still need?
             for child in tree:
-                print (child.tag + ":" + child.text.rstrip())
+                print(child.tag + ":" + child.text.rstrip())
                 for grandchild in child:
                     print("  " + grandchild.tag + ":" + grandchild.text.rstrip())
                     for ggrandchild in grandchild:
@@ -225,6 +227,7 @@ class SpectraLogicAPI:
 
         except Exception as e:
             print("ControllersList Error: " + str(e), file=sys.stderr)
+
 
     #--------------------------------------------------------------------------
     #
@@ -361,31 +364,32 @@ class SpectraLogicAPI:
                 return
 #TBD: the below is basically doing a long list...do we still need?
             for child in tree:
-                print (child.tag + ":" + child.text.rstrip())
+                print(child.tag + ":" + child.text.rstrip())
                 for grandchild in child:
                     print("  " + grandchild.tag + ":" + grandchild.text.rstrip())
                     for ggrandchild in grandchild:
                         print("    " + ggrandchild.tag + ": " + ggrandchild.text.rstrip())
             #iter_ = tree.getiterator()
             #for elem in iter_:
-            #    #print (elem.tag)
+            #    #print(elem.tag)
             #    for child in elem:
-            #       print ("  " + child.tag + ":" + child.text.rstrip())
+            #       print("  " + child.tag + ":" + child.text.rstrip())
 
             #appointments = tree.getchildren()
             #for appointment in appointments:
             #    appt_children = appointment.getchildren()
             #    for appt_child in appt_children:
-            #        print (appt_child.tag + ":" + appt_child.text)
+            #        print(appt_child.tag + ":" + appt_child.text)
 
             #for elem in tree.iter():
-            #    print (elem.tag, elem.attrib, elem.text)
+            #    print(elem.tag, elem.attrib, elem.text)
             #for target in tree.iter('target'):
-            #    print ("hello" + target.text)
+            #    print("hello" + target.text)
             #print(tree.tag)
 
         except Exception as e:
             print("EtherLibStatus Error: " + str(e), file=sys.stderr)
+
 
     #--------------------------------------------------------------------------
     #
@@ -399,7 +403,7 @@ class SpectraLogicAPI:
         try:
             url  = self.baseurl + "/HHMData.xml?action=list"
             tree = self.run_command(url)
-            print("Hardware Health Monitoring (HHM) Counters")
+            print("\nHardware Health Monitoring (HHM) Counters")
             print("-----------------------------------------")
             if self.longlist:
                 self.longlisting(tree, 0)
@@ -455,53 +459,6 @@ class SpectraLogicAPI:
         except Exception as e:
             print("hhmdata Error: " + str(e), file=sys.stderr)
 
-    #--------------------------------------------------------------------------
-    #
-    # Connects to the library using the specified username and password. See
-    # "Configuring Library Users" in your library User Guide for information
-    # about configuring users and passwords, as well as information about what
-    # sort of actions each user type can perform.
-    #
-    def login(self):
-
-        try:
-            url  = self.baseurl + "/login.xml?username=" + self.user + "&password=" + self.passwd
-            tree = self.run_command(url)
-            for child in tree:
-                if child.tag == "status" and child.text == "OK":
-                    os.umask(0o077)
-                    self.cookiejar.save(self.cookiefile, ignore_discard=True, ignore_expires=False)
-                    self.load_cookie()
-
-            if self.loggedin == False:
-                print("Login Failed...\n", file=sys.stderr)
-                self.loggedin  = False
-                self.sessionid = ""
-                self.cookiejar.clear(self.server)
-                os.umask(0o077)
-                self.cookiejar.save(self.cookiefile, ignore_discard=True, ignore_expires=False)
-
-        except Exception as e:
-            print("Login Error: " + str(e), file=sys.stderr)
-
-    #--------------------------------------------------------------------------
-    #
-    # Closes the connection to the library.
-    #
-    def logout(self):
-
-        try:
-            url  = self.baseurl + "/logout.xml"
-            tree = self.run_command(url)
-
-        except Exception as e:
-            print("Logout Error: " + str(e), file=sys.stderr)
-
-        self.loggedin  = False
-        self.sessionid = ""
-        self.cookiejar.clear(self.server)
-        os.umask(0o077)
-        self.cookiejar.save(self.cookiefile, ignore_discard=True, ignore_expires=False)
 
     #--------------------------------------------------------------------------
     #
@@ -563,28 +520,28 @@ class SpectraLogicAPI:
             for child in tree:
                 if ( (child.tag == "robot") or
                      (child.tag == "excessiveMoveFailures") ):
-                    print (child.tag + ":", end='')
+                    print(child.tag + ":", end='')
                     for item in child:
-                        print (" ", end='')
-                        print (item.tag, item.text, sep='=', end='')
-                    print () #newline
+                        print(" ", end='')
+                        print(item.tag, item.text, sep='=', end='')
+                    print() #newline
                 elif (child.tag == "controllerEnvironmentInfo"):
                     for cei in child:
                         if ( (cei.tag == "controller") or
                              (cei.tag == "driveControlModule") or
                              (cei.tag == "serviceBayControlModule") ):
-                            print (cei.tag + ":", end='')
+                            print(cei.tag + ":", end='')
                             for item in cei:
-                                print (" ", end='')
-                                print (item.tag, item.text, sep='=', end='')
-                            print () #newline
+                                print(" ", end='')
+                                print(item.tag, item.text, sep='=', end='')
+                            print() #newline
                         elif ( (cei.tag == "powerSupplyFRU") or
                                (cei.tag == "powerControlModule") or
                                (cei.tag == "fanControlModule") or
                                (cei.tag == "frameManagementModule") ):
-                            print (cei.tag + ":", end='')
+                            print(cei.tag + ":", end='')
                             for item in cei:
-                                print (" ", end='')
+                                print(" ", end='')
                                 if ( (item.tag == "fanInPowerSupplyFRU") or
                                      (item.tag == "powerSupplyInPowerSupplyFRU") or
                                      (item.tag == "powerSupplyInPCM") or
@@ -593,30 +550,112 @@ class SpectraLogicAPI:
                                      (item.tag == "fanPair") or
                                      (item.tag == "fanInFMM") or
                                      (item.tag == "powerSupplyInFMM") ):
-                                    print (item.tag + "=(", end='')
+                                    print(item.tag + "=(", end='')
                                     count = 0
                                     for subitem in item:
                                         if (count > 0):
-                                            print (" ", end='')
-                                        print (subitem.tag, subitem.text, sep='=', end='')
+                                            print(" ", end='')
+                                        print(subitem.tag, subitem.text, sep='=', end='')
                                         count = count + 1
-                                    print (")", end='')
+                                    print(")", end='')
                                 else:
-                                    print (item.tag, item.text, sep='=', end='')
-                            print () #newline
+                                    print(item.tag, item.text, sep='=', end='')
+                            print() #newline
                 elif (child.tag == "ECInfo"):
                     for component in child:
-                        print (child.tag, component.tag, sep=': ', end='')
+                        print(child.tag, component.tag, sep=': ', end='')
                         for item in component:
-                            print (item.tag, item.text, sep='=', end='')
-                            print (" ", end='')
-                        print () #newline
+                            print(item.tag, item.text, sep='=', end='')
+                            print(" ", end='')
+                        print() #newline
                 else:
-                    #print (child.tag, child.text, sep='=')
-                    print (child.tag, child.text, sep=': ')
+                    print(child.tag, child.text, sep=': ')
 
         except Exception as e:
             print("LibraryStatus Error: " + str(e), file=sys.stderr)
+
+
+    #--------------------------------------------------------------------------
+    #
+    # Connects to the library using the specified username and password. See
+    # "Configuring Library Users" in your library User Guide for information
+    # about configuring users and passwords, as well as information about what
+    # sort of actions each user type can perform.
+    #
+    def login(self):
+
+        try:
+            url  = self.baseurl + "/login.xml?username=" + self.user + "&password=" + self.passwd
+            tree = self.run_command(url)
+            for child in tree:
+                if child.tag == "status" and child.text == "OK":
+                    os.umask(0o077)
+                    self.cookiejar.save(self.cookiefile, ignore_discard=True, ignore_expires=False)
+                    self.load_cookie()
+
+            if self.loggedin == False:
+                print("Login Failed...\n", file=sys.stderr)
+                self.loggedin  = False
+                self.sessionid = ""
+                self.cookiejar.clear(self.server)
+                os.umask(0o077)
+                self.cookiejar.save(self.cookiefile, ignore_discard=True, ignore_expires=False)
+
+        except Exception as e:
+            print("Login Error: " + str(e), file=sys.stderr)
+
+
+    #--------------------------------------------------------------------------
+    #
+    # Closes the connection to the library.
+    #
+    def logout(self):
+
+        try:
+            url  = self.baseurl + "/logout.xml"
+            tree = self.run_command(url)
+
+        except Exception as e:
+            print("Logout Error: " + str(e), file=sys.stderr)
+
+        self.loggedin  = False
+        self.sessionid = ""
+        self.cookiejar.clear(self.server)
+        os.umask(0o077)
+        self.cookiejar.save(self.cookiefile, ignore_discard=True, ignore_expires=False)
+
+
+    #--------------------------------------------------------------------------
+    #
+    # Retrieves the name of the BlueScale package currently used by the library.
+    # The data returned by the command also lists all of the BlueScale package
+    # files currently stored on the memory card in the LCM.
+    #
+    def packagelist(self):
+
+        try:
+            url  = self.baseurl + "/package.xml?action=list"
+            tree = self.run_command(url)
+            print("\nBlueScale Package List")
+            print("----------------------")
+            if self.longlist:
+                self.longlisting(tree, 0)
+                return
+            for child in tree:
+                if child.tag == "current":
+                    for element in child:
+                        if element.tag == "name":
+                            print("Currently Running", element.text.rstrip(), sep=(': '))
+                if child.tag == "list":
+                    print("Currently Stored on Library:", end='')
+                    for element in child:
+                        if element.tag == "name":
+                            print(" " + element.text.rstrip(), end='')
+                    print() #newline
+
+        except Exception as e:
+            print("packagelist Error: " + str(e), file=sys.stderr)
+
 
     #--------------------------------------------------------------------------
     #
@@ -701,6 +740,9 @@ def main():
     partitionlist_parser = cmdsubparsers.add_parser('partitionlist',
         help='List all Spectra Logic Library partitions.')
 
+    packagelist_parser = cmdsubparsers.add_parser('packagelist',
+        help='Retrieves the name of the BlueScale package currently used by the library along with the list of packages currently stored on the memory card in the LCM.')
+
 
     args = cmdparser.parse_args()
 
@@ -738,6 +780,8 @@ def main():
         slapi.librarystatus()
     elif args.command == "partitionlist":
         slapi.partitionlist()
+    elif args.command == "packagelist":
+        slapi.packagelist()
     else:
         cmdparser.print_help()
         sys.exit(1)

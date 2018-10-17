@@ -232,20 +232,21 @@ class SpectraLogicAPI:
     #
     def drivelist(self):
 
-        driveFormat = '{:25} {:11} {:8} {:12} {:25} {:15} {:15} {:13} {:11} {:25} {:9} {:7} {:6} {:10} {:8} {:14} {:15}'
+        driveFormat = '{:25} {:11} {:8} {:12} {:25} {:15} {:15} {:13} {:11} {:25} {:9} {:7} {:6} {:9} {:10} {:8} {:14} {:15}'
 
         try:
             url  = self.baseurl + "/driveList.xml?action=list"
             tree = self.run_command(url)
             if self.longlist:
                 self.longlisting(tree, 0)
+                #TODO: Need to add getDriveLoadCount to long format
                 return
             print(driveFormat. \
                 format("ID", "DriveStatus", "Parition",
                        "PartDriveNum", "DriveType",
                        "SerialNum", "MfrSerialNum", "DriveFirmware",
                        "DCMFirmware", "WWN", "FibreAddr",
-                       "LoopNum", "Health",
+                       "LoopNum", "Health", "LoadCount",
                        "SparedWith", "SpareFor", "SparePotential",
                        "FirmwareStaging"))
             print(driveFormat. \
@@ -253,7 +254,7 @@ class SpectraLogicAPI:
                        "------------", "-------------------------",
                        "---------------", "---------------", "-------------",
                        "-----------", "-------------------------", "---------",
-                       "-------", "------",
+                       "-------", "------", "---------",
                        "----------", "--------", "--------------",
                        "---------------"))
             for drive in tree:
@@ -272,9 +273,20 @@ class SpectraLogicAPI:
                 health = ""
                 sparedWith = spareFor = sparePotential = ""
                 firmwareStaging = ""
+                loadCount = ""
                 for element in drive:
                     if element.tag == "ID":
                         myid = element.text.rstrip()
+                        # TBD #####
+                        # Getting "returned an invalid load count" when running
+                        # the command while testing on NERF. So comment out for
+                        # now. Todd sent email to Spectra. 10/16/18
+                        #url2 = self.baseurl + "/driveList.xml?action=getDriveLoadCount&driveName=" + myid
+                        ##print("url2: " + url2)
+                        #driveLoadTree = self.run_command(url2)
+                        #for item in driveLoadTree:
+                        #    if item.tag == "loadCount":
+                        #        loadCount = item.text.rstrip()
                     elif element.tag == "driveStatus":
                         status = element.text.rstrip()
                     elif element.tag == "partition":
@@ -326,12 +338,13 @@ class SpectraLogicAPI:
                 print(driveFormat. \
                     format(myid, status, partition, paritionDriveNum, driveType,
                            serialNum, manuSerialNum, driveFW,
-                           dcmFW, wwn, fibreAddress, loopNum, health,
+                           dcmFW, wwn, fibreAddress, loopNum, health, loadCount,
                            sparedWith, spareFor, sparePotential,
                            firmwareStaging) )
 
         except Exception as e:
             print("DriveList Error: " + str(e), file=sys.stderr)
+
 
     #--------------------------------------------------------------------------
     #

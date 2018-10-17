@@ -389,6 +389,74 @@ class SpectraLogicAPI:
 
     #--------------------------------------------------------------------------
     #
+    # Returns a report showing the current data for all of the Hardware Health
+    # Monitoring (HHM) counters for the library.
+    #
+    def hhmdata(self):
+
+        counterFormat = '{:19} {:15} {:6} {:6} {:25} {:8} {:9} {:9} {:10}'
+
+        try:
+            url  = self.baseurl + "/HHMData.xml?action=list"
+            tree = self.run_command(url)
+            print("Hardware Health Monitoring (HHM) Counters")
+            print("-----------------------------------------")
+            if self.longlist:
+                self.longlisting(tree, 0)
+                return
+            print(counterFormat. \
+                format("CounterName", "SubType", "Value",
+                       "Unit", "Reminder", "Severity",
+                       "DefThresh", "CurThresh", "PostedDate"))
+            print(counterFormat. \
+                format("-------------------", "---------------", "------",
+                       "------", "-------------------------", "--------",
+                       "---------", "---------", "----------"))
+            for child in tree:
+                if child.tag == "counter":
+                    typeName = ""
+                    subTypeName = subTypeValue = subTypeUnit = ""
+                    reminderName = reminderSeverity = ""
+                    reminderDefThresh = reminderCurThresh = ""
+                    reminderPostedDate = ""
+                    for element in child:
+                        if element.tag == "typeName":
+                            typeName = element.text.rstrip()
+                        elif element.tag == "subType":
+                            subTypeName = subTypeValue = subTypeUnit = ""
+                            for subtype in element:
+                                if subtype.tag == "typeName":
+                                    subTypeName = subtype.text.rstrip()
+                                elif subtype.tag == "value":
+                                    subTypeValue = subtype.text.rstrip()
+                                elif subtype.tag == "unit":
+                                    subTypeUnit = subtype.text.rstrip()
+                                elif subtype.tag == "reminder":
+                                    reminderName = reminderSeverity = ""
+                                    reminderDefThresh = reminderCurThresh = ""
+                                    reminderPostedDate = ""
+                                    for reminder in subtype:
+                                        if reminder.tag == "typeName":
+                                            reminderName = reminder.text.rstrip()
+                                        elif reminder.tag == "severity":
+                                            reminderSeverity = reminder.text.rstrip()
+                                        elif reminder.tag == "defaultThreshold":
+                                            reminderDefThresh = reminder.text.rstrip()
+                                        elif reminder.tag == "currentThreshold":
+                                            reminderCurThresh = reminder.text.rstrip()
+                                        elif reminder.tag == "postedDate":
+                                            reminderPostedDate = reminder.text.rstrip()
+                            print(counterFormat. \
+                                format(typeName, subTypeName, subTypeValue,
+                                       subTypeUnit, reminderName,
+                                       reminderSeverity, reminderDefThresh,
+                                       reminderCurThresh, reminderPostedDate))
+
+        except Exception as e:
+            print("hhmdata Error: " + str(e), file=sys.stderr)
+
+    #--------------------------------------------------------------------------
+    #
     # Connects to the library using the specified username and password. See
     # "Configuring Library Users" in your library User Guide for information
     # about configuring users and passwords, as well as information about what
@@ -620,6 +688,9 @@ def main():
     etherlibstatus_parser = cmdsubparsers.add_parser('etherlibstatus',
         help='Retrieve status of the library EtherLib connections.')
 
+    hhmdata_parser = cmdsubparsers.add_parser('hhmdata',
+        help='Returns a report showing the current data for all of the Hardware Health Monitoring (HHM) counters for the library.')
+
     inventorylist_parser = cmdsubparsers.add_parser('inventorylist',
         help='List inventory for the specified partition.')
     inventorylist_parser.add_argument('partition', action='store', help='Spectra Logic Partition')
@@ -659,6 +730,8 @@ def main():
         slapi.drivelist()
     elif args.command == "etherlibstatus":
         slapi.etherlibstatus()
+    elif args.command == "hhmdata":
+        slapi.hhmdata()
     elif args.command == "inventorylist":
         slapi.inventorylist(args.partition)
     elif args.command == "librarystatus":

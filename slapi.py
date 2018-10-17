@@ -211,19 +211,60 @@ class SpectraLogicAPI:
     #
     def controllerslist(self):
 
+        listFormat = '{:20} {:8} {:13} {:22} {:20} {:20} {:8} {:14} {:6} {:16} {:19}'
+
         try:
             url  = self.baseurl + "/controllers.xml?action=list"
             tree = self.run_command(url)
+            print("\nControllers List")
+            print("----------------")
             if self.longlist:
                 self.longlisting(tree, 0)
                 return
-#TBD: the below is basically doing a long list...do we still need?
-            for child in tree:
-                print(child.tag + ":" + child.text.rstrip())
-                for grandchild in child:
-                    print("  " + grandchild.tag + ":" + grandchild.text.rstrip())
-                    for ggrandchild in grandchild:
-                        print("    " + ggrandchild.tag + ": " + ggrandchild.text.rstrip())
+            print(listFormat. \
+                format("ID", "Status", "Firmware",
+                       "Type", "FailoverFrom",
+                       "FailoverTo", "PortName", "UseSoftAddress",
+                       "LoopID", "InitiatorEnabled", "FibreConnectionMode"))
+            print(listFormat. \
+                format("--------------------", "--------", "-------------",
+                       "----------------------", "--------------------",
+                       "--------------------", "--------", "--------------",
+                       "------", "----------------", "-------------------"))
+            for controllers in tree:
+                myid = status = firmware = ctype = failoverFrom = ""
+                failoverTo = portName = useSoftAddress = loopID = ""
+                initiatorEnabled = fibreConnectionMode = ""
+                for element in controllers:
+                    if element.tag == "ID":
+                        myid = element.text.rstrip()
+                    elif element.tag == "status":
+                        status = element.text.rstrip()
+                    elif element.tag == "firmware":
+                        firmware = element.text.rstrip()
+                    elif element.tag == "type":
+                        ctype = element.text.rstrip()
+                    elif element.tag == "failoverFrom":
+                        failoverFrom = element.text.rstrip()
+                    elif element.tag == "failoverTo":
+                        failoverTo = element.text.rstrip()
+                    elif element.tag == "port":
+                        for port in element:
+                            if port.tag == "name":
+                                portName = port.text.rstrip()
+                            elif port.tag == "useSoftAddress":
+                                useSoftAddress = port.text.rstrip()
+                            elif port.tag == "loopId":
+                                loopId = port.text.rstrip()
+                            elif port.tag == "initiatorEnabled":
+                                initiatorEnabled = port.text.rstrip()
+                            elif port.tag == "fibreConnectionMode":
+                                fibreConnectionMode = port.text.rstrip()
+                print(listFormat. \
+                    format(myid, status, firmware,
+                           ctype, failoverFrom,
+                           failoverTo, portName, useSoftAddress,
+                           loopID, initiatorEnabled, fibreConnectionMode))
 
         except Exception as e:
             print("ControllersList Error: " + str(e), file=sys.stderr)
@@ -240,6 +281,8 @@ class SpectraLogicAPI:
         try:
             url  = self.baseurl + "/driveList.xml?action=list"
             tree = self.run_command(url)
+            print("\nDrive List")
+            print("----------")
             if self.longlist:
                 self.longlisting(tree, 0)
                 #TODO: Need to add getDriveLoadCount to long format

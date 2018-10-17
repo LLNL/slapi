@@ -399,36 +399,33 @@ class SpectraLogicAPI:
     #
     def etherlibstatus(self):
 
+        listFormat = '{:5} {:10} {:9}'
+
         try:
             url  = self.baseurl + "/etherLibStatus.xml?action=list"
             tree = self.run_command(url)
+            print("\nEtherLib Status")
+            print("---------------")
             if self.longlist:
                 self.longlisting(tree, 0)
                 return
-#TBD: the below is basically doing a long list...do we still need?
-            for child in tree:
-                print(child.tag + ":" + child.text.rstrip())
-                for grandchild in child:
-                    print("  " + grandchild.tag + ":" + grandchild.text.rstrip())
-                    for ggrandchild in grandchild:
-                        print("    " + ggrandchild.tag + ": " + ggrandchild.text.rstrip())
-            #iter_ = tree.getiterator()
-            #for elem in iter_:
-            #    #print(elem.tag)
-            #    for child in elem:
-            #       print("  " + child.tag + ":" + child.text.rstrip())
-
-            #appointments = tree.getchildren()
-            #for appointment in appointments:
-            #    appt_children = appointment.getchildren()
-            #    for appt_child in appt_children:
-            #        print(appt_child.tag + ":" + appt_child.text)
-
-            #for elem in tree.iter():
-            #    print(elem.tag, elem.attrib, elem.text)
-            #for target in tree.iter('target'):
-            #    print("hello" + target.text)
-            #print(tree.tag)
+            print(listFormat. \
+                format("ID", "Target", "Connected"))
+            print(listFormat. \
+                format("-----", "----------", "---------"))
+            for component in tree:
+                myid = target = connected = ""
+                for element in component:
+                    if element.tag == "ID":
+                        myid = element.text.rstrip()
+                    elif element.tag == "connection":
+                        for connection in element:
+                            if connection.tag == "target":
+                                target = connection.text.rstrip()
+                            elif connection.tag == "connected":
+                                connected = connection.text.rstrip()
+                print(listFormat. \
+                    format(myid, target, connected))
 
         except Exception as e:
             print("EtherLibStatus Error: " + str(e), file=sys.stderr)

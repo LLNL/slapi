@@ -511,15 +511,21 @@ class SpectraLogicAPI:
     #
     def inventorylist(self, partition):
 
+        listFormat = '{:6} {:6} {:10} {:6} {:4}'
+
         try:
             url       = self.baseurl + "/inventory.xml?action=list&partition=" + partition
             tree      = self.run_command(url)
             if self.longlist:
                 self.longlisting(tree, 0)
                 return
+            print("\nInventory List")
+            print("--------------")
             for part in tree:
-                print('{:6} {:6} {:10} {:6} {:6}'.format("ID", "Offset", "Barcode", "Queued", "Full"))
-                print('{:6} {:6} {:10} {:6} {:6}'.format("--", "------", "-------", "------", "----"))
+                print(listFormat.
+                    format("ID", "Offset", "Barcode", "Queued", "Full"))
+                print(listFormat.
+                    format("------", "------", "----------", "------", "----"))
                 for elt in part:
                     if elt.tag != "name":
                         myid = ""
@@ -538,7 +544,7 @@ class SpectraLogicAPI:
                                 isqueued = slot.text
                             elif slot.tag == "full":
                                 full = slot.text
-                        print('{:6} {:6} {:10} {:6} {:6}'.format(myid, offset, barcode, isqueued, full))
+                        print(listFormat.format(myid, offset, barcode, isqueued, full))
 
         except Exception as e:
             print("InventoryList Error: " + str(e), file=sys.stderr)
@@ -710,12 +716,14 @@ class SpectraLogicAPI:
         try:
             url  = self.baseurl + "/partitionList.xml"
             tree = self.run_command(url)
+            print("\nPartition List")
+            print(  "--------------")
             if self.longlist:
                 self.longlisting(tree, 0)
                 return
-#TBD: the below is basically doing a long list...do we still need?
             for child in tree:
-                print(child.tag + ": " + child.text)
+                if child.tag == "partitionName":
+                    print(child.text.rstrip())
 
         except Exception as e:
             print("PartitionList Error: " + str(e), file=sys.stderr)

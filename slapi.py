@@ -285,7 +285,15 @@ class SpectraLogicAPI:
             print("----------")
             if self.longlist:
                 self.longlisting(tree, 0)
-                #TODO: Need to add getDriveLoadCount to long format
+                print("\ngetDriveLoadCount:");
+                for drive in tree:
+                    for element in drive:
+                        if element.tag == "ID":
+                            myid = element.text.rstrip()
+                            print("  drive:")
+                            print("    ID: " + myid);
+                            loadCount = self.GetDriveLoadCount(myid)
+                            print("    loadCount: " + loadCount);
                 return
             print(driveFormat. \
                 format("ID", "DriveStatus", "Parition",
@@ -304,19 +312,9 @@ class SpectraLogicAPI:
                        "----------", "--------", "--------------",
                        "---------------"))
             for drive in tree:
-                myid = ""
-                status = ""
-                partition = ""
-                paritionDriveNum = ""
-                driveType = ""
-                serialNum = ""
-                manuSerialNum = ""
-                driveFW = ""
-                dcmFW = ""
-                wwn = ""
-                fibreAddress = ""
-                loopNum = ""
-                health = ""
+                myid = status = partition = paritionDriveNum = ""
+                driveType = serialNum = manuSerialNum = driveFW = ""
+                dcmFW = wwn = fibreAddress = loopNum = health = ""
                 sparedWith = spareFor = sparePotential = ""
                 firmwareStaging = ""
                 loadCount = ""
@@ -327,12 +325,41 @@ class SpectraLogicAPI:
                         # Getting "returned an invalid load count" when running
                         # the command while testing on NERF. So comment out for
                         # now. Todd sent email to Spectra. 10/16/18
-                        #url2 = self.baseurl + "/driveList.xml?action=getDriveLoadCount&driveName=" + myid
-                        ##print("url2: " + url2)
-                        #driveLoadTree = self.run_command(url2)
-                        #for item in driveLoadTree:
-                        #    if item.tag == "loadCount":
-                        #        loadCount = item.text.rstrip()
+                        # 10/17/18: Spectra believes that the problem is because
+                        # the drive has never been loaded since the firmware
+                        # update. So told me to load/unload. I tried that, but
+                        # am now having HW problems.
+                        loadCount = self.GetDriveLoadCount(myid)
+
+                        #try:
+                        #    url2 = self.baseurl + "/driveList.xml?action=getDriveLoadCount&driveName=" + "FR2/DBA1/fLTO-DRV1"
+                        #    print("url2: " + url2)
+                        #    driveLoadTree = self.run_command(url2)
+                        #except Exception as e:
+                        #    print("DriveList LTO-DRV1 Error: " + str(e), file=sys.stderr)
+
+                        #try:
+                        #    url2 = self.baseurl + "/driveList.xml?action=getDriveLoadCount&driveName=" + "FR2/DBA1/fLTO-DRV2"
+                        #    print("url2: " + url2)
+                        #    driveLoadTree = self.run_command(url2)
+                        #except Exception as e:
+                        #    print("DriveList LTO-DRV2 Error: " + str(e), file=sys.stderr)
+
+                        #try:
+                        #    url2 = self.baseurl + "/driveList.xml?action=getDriveLoadCount&driveName=" + "FR2/DBA6/fTS11x0-DRV3"
+                        #    print("url2: " + url2)
+                        #    driveLoadTree = self.run_command(url2)
+                        #except Exception as e:
+                        #    print("DriveList TS11x0-DRV3 Error: " + str(e), file=sys.stderr)
+
+                        #try:
+                        #    url2 = self.baseurl + "/driveList.xml?action=getDriveLoadCount&driveName=" + "FR2/DBA6/fTS11x0-DRV4"
+                        #    print("url2: " + url2)
+                        #    driveLoadTree = self.run_command(url2)
+                        #except Exception as e:
+                        #    print("DriveList TS11x0-DRV4 Error: " + str(e), file=sys.stderr)
+                        #return
+
                     elif element.tag == "driveStatus":
                         status = element.text.rstrip()
                     elif element.tag == "partition":
@@ -430,6 +457,25 @@ class SpectraLogicAPI:
         except Exception as e:
             print("EtherLibStatus Error: " + str(e), file=sys.stderr)
 
+
+    #--------------------------------------------------------------------------
+    #
+    # Using an inputed driveID (format from drivelist ID), this routine will
+    # get the drive load count for the driveID. Upon success, it returns the
+    # load count, otherwise, it returns the string "INVALID".
+    #
+    def GetDriveLoadCount(self, driveID):
+
+        try:
+            url = self.baseurl + "/driveList.xml?action=getDriveLoadCount&driveName=" + driveID
+            driveLoadTree = self.run_command(url)
+        except Exception as e:
+            loadCount = "INVALID"
+        else:
+            for count in driveLoadTree:
+                if count.tag == "loadCount":
+                    loadCount = count.text.rstrip()
+        return(loadCount)
 
     #--------------------------------------------------------------------------
     #

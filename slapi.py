@@ -774,6 +774,76 @@ class SpectraLogicAPI:
         except Exception as e:
             print("PartitionList Error: " + str(e), file=sys.stderr)
 
+    #--------------------------------------------------------------------------
+    #
+    # Returns the list of system messages that are currently stored on the
+    # library. The messages are listed in the order they were posted, beginning
+    # with the most recent.
+    #
+    #
+    def systemmessages(self):
+
+        msgFormat = '{:6} {:19} {:11} {}'
+
+        try:
+            url  = self.baseurl + "/systemMessages.xml"
+            tree = self.run_command(url)
+            print("\nSystem Messages")
+            print(  "---------------")
+            if self.longlist:
+                self.longlisting(tree, 0)
+                return
+            print(msgFormat. \
+                format("Number", "Date", "Severity", "Message/Remedy"))
+            print(msgFormat. \
+                format("------", "-------------------", "-----------",
+                       "--------------"))
+            for child in tree:
+                if child.tag == "message":
+
+                    # initialize
+                    number = severity = message = remedy = ""
+                    month = day = hour = minute = second = "00"
+                    year = "0000"
+                    dateString = year + "-" + month + "-" + day + " " + \
+                                 hour + ":" + minute + ":" + second
+
+                    # go thru the records
+                    for messageRecord in child:
+                        if messageRecord.tag == "number":
+                            number = messageRecord.text.rstrip()
+                        elif messageRecord.tag == "severity":
+                            severity = messageRecord.text.rstrip()
+                        elif messageRecord.tag == "date":
+                            for date in messageRecord:
+                                if date.tag == "month":
+                                    month = date.text.rstrip()
+                                elif date.tag == "day":
+                                    day = date.text.rstrip()
+                                elif date.tag == "year":
+                                    year = date.text.rstrip()
+                        elif messageRecord.tag == "time":
+                            for time in messageRecord:
+                                if time.tag == "hour":
+                                    hour = time.text.rstrip()
+                                elif time.tag == "minute":
+                                    minute = time.text.rstrip()
+                                elif time.tag == "second":
+                                    second = time.text.rstrip()
+                        elif messageRecord.tag == "notification":
+                            message = "Message: " + messageRecord.text.rstrip()
+                        elif messageRecord.tag == "remedy":
+                            remedy = "Remedy: " + messageRecord.text.rstrip()
+
+                    # print it out; put remedy and message on separate lines
+                    dateString = year + "-" + month + "-" + day + " " + \
+                                 hour + ":" + minute + ":" + second
+                    print(msgFormat.format(number, dateString, severity, message))
+                    print(msgFormat.format(number, dateString, severity, remedy))
+
+        except Exception as e:
+            print("systemMessages Error: " + str(e), file=sys.stderr)
+
 
 #==============================================================================
 def main():
@@ -831,11 +901,14 @@ def main():
     librarystatus_parser = cmdsubparsers.add_parser('librarystatus',
         help='Returns library type, serial number, component status and engineering change level information.')
 
+    packagelist_parser = cmdsubparsers.add_parser('packagelist',
+        help='Retrieves the name of the BlueScale package currently used by the library along with the list of packages currently stored on the memory card in the LCM.')
+
     partitionlist_parser = cmdsubparsers.add_parser('partitionlist',
         help='List all Spectra Logic Library partitions.')
 
-    packagelist_parser = cmdsubparsers.add_parser('packagelist',
-        help='Retrieves the name of the BlueScale package currently used by the library along with the list of packages currently stored on the memory card in the LCM.')
+    systemmessages_parser = cmdsubparsers.add_parser('systemmessages',
+        help='Returns the list of system messages that are currently stored on the library. Most recent first.')
 
 
     args = cmdparser.parse_args()
@@ -872,10 +945,12 @@ def main():
         slapi.inventorylist(args.partition)
     elif args.command == "librarystatus":
         slapi.librarystatus()
-    elif args.command == "partitionlist":
-        slapi.partitionlist()
     elif args.command == "packagelist":
         slapi.packagelist()
+    elif args.command == "partitionlist":
+        slapi.partitionlist()
+    elif args.command == "systemmessages":
+        slapi.systemmessages()
     else:
         cmdparser.print_help()
         sys.exit(1)

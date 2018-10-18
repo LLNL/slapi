@@ -774,6 +774,7 @@ class SpectraLogicAPI:
         except Exception as e:
             print("PartitionList Error: " + str(e), file=sys.stderr)
 
+
     #--------------------------------------------------------------------------
     #
     # Returns the list of system messages that are currently stored on the
@@ -845,6 +846,90 @@ class SpectraLogicAPI:
             print("systemMessages Error: " + str(e), file=sys.stderr)
 
 
+    #--------------------------------------------------------------------------
+    #
+    # Returns the list of the extended action and background operations
+    # currently in process on the library.
+    #
+    # - If the library is not currently performing any extended or background
+    #   operations, the command returns a page with empty parameter tags.
+    # - If the library is performing any extended or background operations the
+    #   command returns the following XML-formatted data:
+    #
+    #
+    def tasklist (self):
+
+        actionFormat = '{:25} {:14} {}'
+        taskFormat   = '{:25} {:25} {}'
+
+        try:
+            url  = self.baseurl + "/taskList.xml"
+            tree = self.run_command(url)
+            print("\nTask List")
+            print(  "---------")
+
+            # Bail if we don't have any elements
+            if len(tree) == 0:
+                print("None")
+                return
+
+            # Handle long list option
+            if self.longlist:
+                self.longlisting(tree, 0)
+                return
+
+            # Process the elements
+            taskHeaderPrinted = False
+            for child in tree:
+                if child.tag == "currentAsynchronousAction":
+                    # There's at most one currentAsynchronousAction
+                    name = status = feedbackString = ""
+                    for action in child:
+                        if action.tag == "name":
+                            name = action.text.rstrip()
+                        elif action.tag == "status":
+                            status = action.text.rstrip()
+                        elif action.tag == "feedbackString":
+                            feedbackString = action.text.rstrip()
+                    print(actionFormat. \
+                        format("Name", "Status", "FeedbackString"))
+                    print(actionFormat. \
+                        format("-------------------------", "--------------",
+                               "--------------"))
+                    print(actionFormat.format(name, status, feedbackString))
+                elif child.tag == "currentBackgroundTasks":
+                    # There can be multiple of these
+                    if (taskHeaderPrinted == False):
+                        print() # newline
+                        print(taskFormat. \
+                            format("Name", "Description", "ExtraInfo"))
+                        print(taskFormat. \
+                            format("-------------------------",
+                                   "-------------------------",
+                                   "---------"))
+                        taskHeaderPrinted = True
+                    name = description = extraInformation = ""
+                    for task in child:
+                        if task.tag == "name":
+                            name = task.text.rstrip()
+                        elif task.tag == "thread":
+                            for thread in task:
+                                if thread.tag == "description":
+                                    description = thread.text.rstrip()
+                                elif thread.tag == "extraInformation":
+                                    extraInformation = thread.text.rstrip()
+                    print(taskFormat. \
+                        format(name, description, extraInformation))
+                elif child.tag == "pageNeedingProgressRequest":
+                    print("\nPage Needing Progress Request")
+                    print(  "-----------------------------")
+                    for page in child:
+                        print(page.text.rstrip)
+
+        except Exception as e:
+            print("taskList  Error: " + str(e), file=sys.stderr)
+
+
 #==============================================================================
 def main():
 
@@ -910,6 +995,9 @@ def main():
     systemmessages_parser = cmdsubparsers.add_parser('systemmessages',
         help='Returns the list of system messages that are currently stored on the library. Most recent first.')
 
+    tasklist_parser = cmdsubparsers.add_parser('tasklist',
+        help='Returns the list of the extended action and background operations currently in process on the library.')
+
 
     args = cmdparser.parse_args()
 
@@ -951,6 +1039,8 @@ def main():
         slapi.partitionlist()
     elif args.command == "systemmessages":
         slapi.systemmessages()
+    elif args.command == "tasklist":
+        slapi.tasklist()
     else:
         cmdparser.print_help()
         sys.exit(1)

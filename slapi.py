@@ -13,6 +13,7 @@ import http.cookiejar
 import ssl
 import xml.etree.ElementTree
 import xml.dom.minidom
+import traceback
 
 class SpectraLogicLoginError(Exception):
 
@@ -211,7 +212,7 @@ class SpectraLogicAPI:
     #
     def controllerslist(self):
 
-        listFormat = '{:20} {:8} {:13} {:22} {:20} {:20} {:8} {:14} {:6} {:16} {:19}'
+        listFormat = '{:20} {:8} {:13} {:22} {:20} {:20} {:8} {:14} {:6} {:19}'
 
         try:
             url  = self.baseurl + "/controllers.xml?action=list"
@@ -225,16 +226,16 @@ class SpectraLogicAPI:
                 format("ID", "Status", "Firmware",
                        "Type", "FailoverFrom",
                        "FailoverTo", "PortName", "UseSoftAddress",
-                       "LoopID", "InitiatorEnabled", "FibreConnectionMode"))
+                       "LoopID", "FibreConnectionMode"))
             print(listFormat. \
                 format("--------------------", "--------", "-------------",
                        "----------------------", "--------------------",
                        "--------------------", "--------", "--------------",
-                       "------", "----------------", "-------------------"))
+                       "------", "-------------------"))
             for controllers in tree:
                 myid = status = firmware = ctype = failoverFrom = ""
                 failoverTo = portName = useSoftAddress = loopID = ""
-                initiatorEnabled = fibreConnectionMode = ""
+                fibreConnectionMode = ""
                 for element in controllers:
                     if element.tag == "ID":
                         myid = element.text.rstrip()
@@ -256,15 +257,14 @@ class SpectraLogicAPI:
                                 useSoftAddress = port.text.rstrip()
                             elif port.tag == "loopId":
                                 loopId = port.text.rstrip()
-                            elif port.tag == "initiatorEnabled":
-                                initiatorEnabled = port.text.rstrip()
+                            #initiatorEnabled is no longer supported
                             elif port.tag == "fibreConnectionMode":
                                 fibreConnectionMode = port.text.rstrip()
                 print(listFormat. \
                     format(myid, status, firmware,
                            ctype, failoverFrom,
                            failoverTo, portName, useSoftAddress,
-                           loopID, initiatorEnabled, fibreConnectionMode))
+                           loopID, fibreConnectionMode))
 
         except Exception as e:
             print("ControllersList Error: " + str(e), file=sys.stderr)
@@ -599,9 +599,877 @@ class SpectraLogicAPI:
     #--------------------------------------------------------------------------
     #
     # Returns the library type, serial number, component status, and engineering
-    # change level information for the library that received the command.
+    # change level information for the library that received the command. With
+    # headers.
     #
     def librarystatus(self):
+
+        topFormat = '{:11} {:11} {:9}'
+        robotFormat = '{:6} {:9} {:15} {:12} {:19} {:28} {:23} {:32} {:11} {:13} {:14} {:17}'
+        moveFormat  = '{:12} {:12} {:12} {:12} {:20} {:19}'
+        controllerFormat = '{:25} {:13} {:11} {:11} {:14}'
+        driveCMFormat = '{:25} {:13} {:12} {:16} {:15}'
+        powerSupplyFRUFormat = '{:25} {:12} {:13} {:11} {:9} {:8} {:11} {:9} {:8} {:20} {:13} {:13} {:20} {:9} {:9} {:9}'
+        powerCMFormat = '{:25} {:13} {:17} {:16} {:18} {:22} {:16} {:18} {:13} {:12} {:20} {:19} {:19}'
+        fanCMFormat = '{:25} {:8} {:13} {:15} {:14} {:17} {:24} {:12} {:15} {:15} {:15} {:11} {:11} {:16} {:12} {:12}'
+        frameMMFormat = '{:25} {:13} {:12} {:13} {:19} {:19} {:20} {:16} {:12} {:13} {:16} {:25} {:20} {:24} {:12} {:14} {:16} {:15} {:19} {:11} {:13} {:17} {:17} {:21} {:21}'
+        fanPairFormat = '{:25} {:8} {:16}'
+        fanInFMMFormat = '{:25} {:6} {:13}'
+        serviceFormat = '{:25} {:11} {:15} {:14} {:15} {:15} {:9} {:19} {:13} {:14} {:10} {:19} {:15}'
+        powerInFMMFormat = '{:25} {:19} {:19}'
+        componentFormat = '{:25} {:2} {:15} {:18} {:25} {:10}'
+
+        try:
+            url  = self.baseurl + "/libraryStatus.xml"
+            tree = self.run_command(url)
+            print("\nLibrary Status")
+            print("--------------")
+            if self.longlist:
+                self.longlisting(tree, 0)
+                return
+
+            # top level stuff
+            libraryType = tree.find("libraryType")
+            railPowerOn = tree.find("railPowerOn")
+            serialNumber = tree.find("serialNumber")
+            print()
+            print(topFormat. \
+                format("LibraryType", "RailPowerOn", "SerialNum"))
+            print(topFormat. \
+                format("-----------", "-----------", "---------"))
+            print(topFormat. \
+                format(libraryType.text.strip(),
+                       railPowerOn.text.strip(),
+                       serialNumber.text.strip()))
+
+            # initialize some header print variables
+            robotHeaderPrinted = False
+            controllerHeaderPrinted = False
+            driveCMHeaderPrinted = False
+            psFRUHeaderPrinted = False
+            powerCMHeaderPrinted = False
+            fanCMHeaderPrinted = False
+            frameMMHeaderPrinted = False
+            componentHeaderPrinted = False
+            fanPairStringList = []
+            fanInFMMStringList = []
+            powerInFMMStringList = []
+            serviceStringList = []
+
+            for child in tree:
+
+                # robot list
+                if child.tag == "robot":
+                    if robotHeaderPrinted == False:
+                        print() #newline
+                        print(robotFormat. \
+                            format("Robot", "State", "TransporterType",
+                                   "ServiceFrame", "TapeInPickerCurrent",
+                                   "TeraPackInTransporterCurrent",
+                                   "TapeInPickerUponService",
+                                   "TeraPackInTransporterUponService",
+                                   "TopHAXGear", "BottomHAXGear",
+                                   "TopHAXSolenoid", "BottomHAXSolenoid"))
+                        print(robotFormat. \
+                            format("------", "---------", "---------------",
+                                   "------------", "-------------------",
+                                   "----------------------------",
+                                   "-----------------------",
+                                   "--------------------------------",
+                                   "-----------", "-------------",
+                                   "--------------", "-----------------"))
+                        robotHeaderPrinted = True;
+                    number = state = transporterType = serviceFrame = ""
+                    tapeInPickerCurrent = TeraPackInTransporterCurrent = ""
+                    tapeInPickerUponService = ""
+                    TeraPackInTransporterUponService = topHAXGear = ""
+                    bottomHAXGear = topHAXSolenoid = bottomHAXSolenoid = ""
+                    for robot in child:
+                        if robot.tag == "number":
+                            number = robot.text.strip()
+                        elif robot.tag == "state":
+                            state = robot.text.strip()
+                        elif robot.tag == "transporterType":
+                            transporterType = robot.text.strip()
+                        elif robot.tag == "serviceFrame":
+                            serviceFrame = robot.text.strip()
+                        elif robot.tag == "tapeInPickerCurrent":
+                            tapeInPickerCurrent = robot.text.strip()
+                        elif robot.tag == "TeraPackInTransporterCurrent":
+                            TeraPackInTransporterCurrent = robot.text.strip()
+                        elif robot.tag == "tapeInPickerUponService":
+                            tapeInPickerUponService = robot.text.strip()
+                        elif robot.tag == "TeraPackInTransporterUponService":
+                            TeraPackInTransporterUponService = robot.text.strip()
+                        elif robot.tag == "topHAXGear":
+                            topHAXGear = robot.text.strip()
+                        elif robot.tag == "bottomHAXGear":
+                            bottomHAXGear = robot.text.strip()
+                        elif robot.tag == "topHAXSolenoid":
+                            topHAXSolenoid = robot.text.strip()
+                        elif robot.tag == "bottomHAXSolenoid":
+                            bottomHAXSolenoid = robot.text.strip()
+                    print(robotFormat. \
+                        format(number, state, transporterType,
+                               serviceFrame, tapeInPickerCurrent,
+                               TeraPackInTransporterCurrent,
+                               tapeInPickerUponService,
+                               TeraPackInTransporterUponService,
+                               topHAXGear, bottomHAXGear,
+                               topHAXSolenoid, bottomHAXSolenoid))
+
+                # excessiveMoveFailures list
+                if child.tag == "excessiveMoveFailures":
+                    print("\nExcessive Move Failures:")
+                    print(moveFormat. \
+                        format("Partition", "Source", "Destination",
+                               "NumFailures", "LastSenseInfo",
+                               "LastFailedMoveTime"))
+                    print(moveFormat. \
+                        format("------------", "------------", "------------",
+                               "------------", "--------------------",
+                               "-------------------"))
+                    partition = source = destination = numberOfFailures = ""
+                    lastSenseInfo = lastFailedMoveTime = ""
+
+                    for move in child:
+                        if move.tag == "partition":
+                            partition = move.text.strip()
+                        elif move.tag == "source":
+                            source = move.text.strip()
+                        elif move.tag == "destination":
+                            destination = move.text.strip()
+                        elif move.tag == "numberOfFailures":
+                            numberOfFailures = move.text.strip()
+                        elif move.tag == "lastSenseInfo":
+                            lastSenseInfo = move.text.strip()
+                        elif move.tag == "lastFailedMoveTime":
+                            lastFailedMoveTime = move.text.strip()
+                    print(moveFormat. \
+                        format(partition, source, destination,
+                               numberOfFailures, lastSenseInfo,
+                               lastFailedMoveTime))
+
+                # controllerEnvironmentInfo list
+                if child.tag == "controllerEnvironmentInfo":
+                    for ceinfo in child:
+
+                        # controllers
+                        if ceinfo.tag == "controller":
+                            if controllerHeaderPrinted == False:
+                                #print("\nController Environmental Info")
+                                #print(  "-----------------------------")
+                                print()
+                                print(controllerFormat. \
+                                    format("ControllerID", "TempInCelsius",
+                                           "PortALinkUp", "PortBLinkUp",
+                                           "FailoverStatus"))
+                                print(controllerFormat. \
+                                    format("-------------------------",
+                                           "-------------", "-----------",
+                                           "-----------", "--------------"))
+                                controllerHeaderPrinted = True
+                            ID = temperatureInCelsius = portALinkUp = ""
+                            portBLinkUp = failoverStatus = ""
+                            for controller in ceinfo:
+                                if controller.tag == "ID":
+                                    ID = controller.text.strip()
+                                elif controller.tag == "temperatureInCelsius":
+                                    temperatureInCelsius = controller.text.strip()
+                                elif controller.tag == "portALinkUp":
+                                    portALinkUp = controller.text.strip()
+                                elif controller.tag == "portBLinkUp":
+                                    portBLinkUp = controller.text.strip()
+                                elif controller.tag == "failoverStatus":
+                                    failoverStatus = controller.text.strip()
+                            print(controllerFormat. \
+                                format(ID, temperatureInCelsius, portALinkUp,
+                                       portBLinkUp, failoverStatus))
+
+                        # drive control modules
+                        if ceinfo.tag == "driveControlModule":
+                            if driveCMHeaderPrinted == False:
+                                #print("\nDrive Control Module Environmental Info")
+                                #print(  "---------------------------------------")
+                                print()
+                                print(driveCMFormat. \
+                                    format("DriveControlModuleID", "12VoltVoltage",
+                                           "5VoltVoltage", "FanCurrentInAmps",
+                                           "TempInCelsius"))
+                                print(driveCMFormat. \
+                                    format("-------------------------",
+                                           "-------------", "------------",
+                                           "----------------", "---------------"))
+                                driveCMHeaderPrinted = True
+                            ID = twelveVoltVoltage = fiveVoltVoltage = ""
+                            fanCurrentInAmps = temperatureInCelsius = ""
+                            for driveCM in ceinfo:
+                                if driveCM.tag == "ID":
+                                    ID = driveCM.text.strip()
+                                elif driveCM.tag == "twelveVoltVoltage":
+                                    twelveVoltVoltage = driveCM.text.strip()
+                                elif driveCM.tag == "fiveVoltVoltage":
+                                    fiveVoltVoltage = driveCM.text.strip()
+                                elif driveCM.tag == "fanCurrentInAmps":
+                                    fanCurrentInAmps = driveCM.text.strip()
+                                elif driveCM.tag == "temperatureInCelsius":
+                                    temperatureInCelsius = driveCM.text.strip()
+                            print(driveCMFormat. \
+                                format(ID, twelveVoltVoltage, fiveVoltVoltage,
+                                       fanCurrentInAmps, temperatureInCelsius))
+
+                        # power supply FRUs
+                        if ceinfo.tag == "powerSupplyFRU":
+                            if psFRUHeaderPrinted == False:
+                                print()
+                                print(powerSupplyFRUFormat. \
+                                    format("PowerSupplyFRUID", "InputPowerOK",
+                                           "OutputPowerOK", "TempWarning",
+                                           "TempAlarm", "ModelNum",
+                                           "ManuPartNum", "SerialNum",
+                                           "ModLevel", "Manufacturer",
+                                           "CountryOfManu", "TempInCelsius",
+                                           "CommunicatingWithPCM",
+                                           "Fan1_Okay", "Fan2_Okay", "Fan3_Okay"))
+                                print(powerSupplyFRUFormat. \
+                                    format("-------------------------", #25
+                                           "------------",  #12
+                                           "-------------", #13
+                                           "-----------",   #11
+                                           "---------", #9
+                                           "--------",   #8
+                                           "-----------", #11
+                                           "---------", #9
+                                           "--------",  #8
+                                           "--------------------", #20
+                                           "-------------", #13
+                                           "-------------", #13
+                                           "--------------------", #20
+                                           "---------", #9
+                                           "---------", #9
+                                           "---------")) #9
+                                psFRUHeaderPrinted = True
+
+                            ID = inputPowerOkay = outputPowerOkay = ""
+                            temperatureWarning = temperatureAlarm = ""
+                            modelNumber = manufacturerPartNumber = ""
+                            serialNumber = modLevel = manufacturer = ""
+                            countryOfManufacturer = temperatureInCelsius = ""
+                            communicatingWithPCM = ""
+                            fanOne = fanTwo = fanThree = ""
+
+                            for psFRU in ceinfo:
+                                if psFRU.tag == "ID":
+                                    ID = psFRU.text.strip()
+                                elif psFRU.tag == "inputPowerOkay":
+                                    inputPowerOkay = psFRU.text.strip()
+                                elif psFRU.tag == "outputPowerOkay":
+                                    outputPowerOkay = psFRU.text.strip()
+                                elif psFRU.tag == "temperatureWarning":
+                                    temperatureWarning = psFRU.text.strip()
+                                elif psFRU.tag == "temperatureAlarm":
+                                    temperatureAlarm = psFRU.text.strip()
+                                elif psFRU.tag == "modelNumber":
+                                    modelNumber = psFRU.text.strip()
+                                elif psFRU.tag == "manufacturerPartNumber":
+                                    manufacturerPartNumber = psFRU.text.strip()
+                                elif psFRU.tag == "serialNumber":
+                                    serialNumber = psFRU.text.strip()
+                                elif psFRU.tag == "modLevel":
+                                    modLevel = psFRU.text.strip()
+                                elif psFRU.tag == "manufacturer":
+                                    manufacturer = psFRU.text.strip()
+                                elif psFRU.tag == "countryOfManufacturer":
+                                    countryOfManufacturer = psFRU.text.strip()
+                                elif psFRU.tag == "temperatureInCelsius":
+                                    temperatureInCelsius = psFRU.text.strip()
+                                elif psFRU.tag == "communicatingWithPCM":
+                                    communicatingWithPCM = psFRU.text.strip()
+                                elif psFRU.tag == "fanInPowerSupplyFRU":
+                                    fanNum = fanOkay = ""
+                                    for fan in psFRU:
+                                        if fan.tag == "number":
+                                            fanNum = fan.text.strip()
+                                        elif fan.tag == "okay":
+                                            fanOkay = fan.text.strip()
+                                            if fanNum == "1":
+                                                fanOne = fanOkay
+                                            elif fanNum == "2":
+                                                fanTwo = fanOkay
+                                            elif fanNum == "3":
+                                                fanThree = fanOkay
+
+                            print(powerSupplyFRUFormat. \
+                                format(ID, inputPowerOkay, outputPowerOkay,
+                                       temperatureWarning, temperatureAlarm,
+                                       modelNumber, manufacturerPartNumber,
+                                       serialNumber, modLevel, manufacturer,
+                                       countryOfManufacturer,
+                                       temperatureInCelsius,
+                                       communicatingWithPCM,
+                                       fanOne, fanTwo, fanThree))
+
+                        # power control modules
+                        if ceinfo.tag == "powerControlModule":
+                            if powerCMHeaderPrinted == False:
+                                print()
+                                print(powerCMFormat. \
+                                    format("PowerControlModuleID",
+                                           "TempInCelsius",
+                                           "ParallelACPresent",
+                                           "PrimaryACPresent",
+                                           "SecondaryACPresent",
+                                           "SupplyDetectionWorking",
+                                           "PrimaryACVoltage",
+                                           "SecondaryACVoltage",
+                                           "12VoltVoltage",
+                                           "5VoltVoltage",
+                                           "OnBoardTempInCelsius",
+                                           "PowerSupplyPosition",
+                                           "PowerSupplyFaulted?"))
+                                print(powerCMFormat. \
+                                    format("-------------------------", #25
+                                           "-------------", #13
+                                           "-----------------", #17
+                                           "----------------", #16
+                                           "------------------", #18
+                                           "----------------------", #22
+                                           "----------------", #16
+                                           "------------------", #18
+                                           "-------------", #13
+                                           "------------", #12
+                                           "--------------------", #20
+                                           "-------------------", #19
+                                           "-------------------")) #19
+                                powerCMHeaderPrinted = True
+
+                            ID = temperatureInCelsius = parallelACPresent = ""
+                            primaryACPresent = secondaryACPresent = ""
+                            supplyDetectionWorking = ""
+                            primaryACVoltage = secondaryACVoltage = ""
+                            twelveVoltVoltage = fiveVoltVoltage = ""
+                            onBoardTemperatureInCelsius = ""
+                            position = faulted = ""
+                            origPosition = origFaulted = ""
+
+                            for pcm in ceinfo:
+                                if pcm.tag == "ID":
+                                    ID = pcm.text.strip()
+                                elif pcm.tag == "temperatureInCelsius":
+                                    temperatureInCelsius = pcm.text.strip()
+                                elif pcm.tag == "parallelACPresent":
+                                    parallelACPresent = pcm.text.strip()
+                                elif pcm.tag == "primaryACPresent":
+                                    primaryACPresent = pcm.text.strip()
+                                elif pcm.tag == "secondaryACPresent":
+                                    secondaryACPresent = pcm.text.strip()
+                                elif pcm.tag == "supplyDetectionWorking":
+                                    supplyDetectionWorking = pcm.text.strip()
+                                #ACCurrentInAmps is no longer supported
+                                elif pcm.tag == "primaryACVoltage":
+                                    primaryACVoltage = pcm.text.strip()
+                                elif pcm.tag == "secondaryACVoltage":
+                                    secondaryACVoltage = pcm.text.strip()
+                                elif pcm.tag == "twelveVoltVoltage":
+                                    twelveVoltVoltage = pcm.text.strip()
+                                elif pcm.tag == "fiveVoltVoltage":
+                                    fiveVoltVoltage = pcm.text.strip()
+                                elif pcm.tag == "onBoardTemperatureInCelsius":
+                                    onBoardTemperatureInCelsius = pcm.text.strip()
+                                #remoteTemperatureInCelsius is no longer supported
+                                elif pcm.tag == "powerSupplyInPCM":
+                                    # The PCM can have multiple power supplies,
+                                    # so output one line per power supply
+                                    # location.
+                                    for item in pcm:
+                                        if item.tag == "position":
+                                            origPosition = position
+                                            position = item.text.strip()
+                                        elif item.tag == "faulted":
+                                            origFaulted = faulted
+                                            faulted = item.text.strip()
+                                        if ( (origPosition != position) and
+                                             (origFaulted != faulted) ):
+                                            print(powerCMFormat. \
+                                                format(ID, temperatureInCelsius,
+                                                    parallelACPresent, primaryACPresent,
+                                                    secondaryACPresent,
+                                                    supplyDetectionWorking,
+                                                    primaryACVoltage, secondaryACVoltage,
+                                                    twelveVoltVoltage, fiveVoltVoltage,
+                                                    onBoardTemperatureInCelsius,
+                                                    position,
+                                                    faulted))
+                                            position = faulted = ""
+                                            origPosition = origFaulted = ""
+
+
+                        # fan control modules
+                        # Note: wasn't able to test on NERF Tfinity as it
+                        # apparently doesn't have any fan control modules!
+                        if ceinfo.tag == "fanControlModule":
+                            if fanCMHeaderPrinted == False:
+                                print()
+                                print(fanCMFormat. \
+                                    format("FanControlModuleID",
+                                           "FrameNum",
+                                           "TempInCelsius",
+                                           "BackPanelSwitch",
+                                           "FanPanelSwitch",
+                                           "FilterPanelSwitch",
+                                           "FrontTAPFramePanelSwitch",
+                                           "BoardVoltage",
+                                           "FanInputVoltage",
+                                           "FanSpeedVoltage",
+                                           "FanSpeedSetting",
+                                           "FanInFCMNum",
+                                           "FanInFCMOn?",
+                                           "FanInFCMSpeedInRPM",
+                                           "LightBankNum",
+                                           "LightBankOn?"))
+                                print(powerCMFormat. \
+                                    format("-------------------------", #25
+                                           "--------", #8
+                                           "-------------", #13
+                                           "---------------", #15
+                                           "--------------", #14
+                                           "-----------------", #17
+                                           "------------------------", #24
+                                           "------------", #12
+                                           "---------------", #15
+                                           "---------------", #15
+                                           "---------------", #15
+                                           "-----------", #11
+                                           "-----------", #11
+                                           "------------------", #16
+                                           "------------", #12
+                                           "------------")) #12
+                                fanCMHeaderPrinted = True
+
+                            ID = frameNumber = temperatureInCelsius = ""
+                            backPanelSwitch = fanPanelSwitch = ""
+                            filterPanelSwitch = frontTAPFramePanelSwitch = ""
+                            boardVoltage = fanInputVoltage = ""
+                            fanSpeedVoltage = fanSpeedSetting = ""
+
+                            for fcm in ceinfo:
+                                if fcm.tag == "ID":
+                                    ID = fcm.text.strip()
+                                elif fcm.tag == "frameNumber":
+                                    frameNumber = fcm.text.strip()
+                                elif fcm.tag == "temperatureInCelsius":
+                                    temperatureInCelsius = fcm.text.strip()
+                                elif fcm.tag == "backPanelSwitch":
+                                    backPanelSwitch = fcm.text.strip()
+                                elif fcm.tag == "fanPanelSwitch":
+                                    fanPanelSwitch = fcm.text.strip()
+                                elif fcm.tag == "filterPanelSwitch":
+                                    filterPanelSwitch = fcm.text.strip()
+                                elif fcm.tag == "frontTAPFramePanelSwitch":
+                                    frontTAPFramePanelSwitch = fcm.text.strip()
+                                elif fcm.tag == "boardVoltage":
+                                    boardVoltage = fcm.text.strip()
+                                elif fcm.tag == "fanInputVoltage":
+                                    fanInputVoltage = fcm.text.strip()
+                                elif fcm.tag == "fanSpeedVoltage":
+                                    fanSpeedVoltage = fcm.text.strip()
+                                elif fcm.tag == "fanSpeedSetting":
+                                    fanSpeedSetting = fcm.text.strip()
+                                #newFansCalibrated is no longer used
+                                #newFilterCalibrated is no longer used
+                                elif fcm.tag == "fanInFCM":
+                                    fanInFCMList = fcm.findall("fanInFCM")
+                                elif fcm.tag == "lightBank":
+                                    lightBankList = fcm.findall("fanInFCM")
+
+                            fanNumber = fanOn = fanSpeedInRPM = ""
+                            lightBankNumber = lightBankOn = ""
+                            for fan in fanInCMList:
+                                if fan.tag == "number":
+                                    fanNumber = fan.text.strip()
+                                elif fan.tag == "on":
+                                    fanOn = fan.text.strip()
+                                elif fan.tag == "speedInRPM":
+                                    fanSpeedInRPM = fan.text.strip()
+
+                                print(fanCMFormat. \
+                                    format(ID, frameNumber,
+                                           temperatureInCelsius,
+                                           backPanelSwitch, fanPanelSwitch,
+                                           filterPanelSwitch,
+                                           frontTAPFramePanelSwitch,
+                                           boardVoltage, fanInputVoltage,
+                                           fanSpeedVoltage, fanSpeedSetting,
+                                           fanNumber, fanOn, fanSpeedInRPM,
+                                           lightBankNumber, lightBankOn))
+
+                            fanNumber = fanOn = fanSpeedInRPM = ""
+                            lightBankNumber = lightBankOn = ""
+                            for lightBank in lightBankList:
+                                if lightBank.tag == "number":
+                                    lightBankNumber = lightBank.text.strip()
+                                elif lightBank.tag == "on":
+                                    lightBankOn = lightBank.text.strip()
+
+                                print(fanCMFormat. \
+                                    format(ID, frameNumber,
+                                           temperatureInCelsius,
+                                           backPanelSwitch, fanPanelSwitch,
+                                           filterPanelSwitch,
+                                           frontTAPFramePanelSwitch,
+                                           boardVoltage, fanInputVoltage,
+                                           fanSpeedVoltage, fanSpeedSetting,
+                                           fanNumber, fanOn, fanSpeedInRPM,
+                                           lightBankNumber, lightBankOn))
+
+                        # frame management modules
+                        if ceinfo.tag == "frameManagementModule":
+                            if frameMMHeaderPrinted == False:
+                                print()
+                                print(frameMMFormat. \
+                                    format("FrameManagementModuleID",
+                                           "24VoltVoltage", "5VoltVoltage",
+                                           "FanRailVoltage",
+                                           "SwitchedRailVoltage",
+                                           "24VoltCurrentInAmps",
+                                           "PowerConsumedInWatts",
+                                           "SampleRateInSecs", "SamplesTaken",
+                                           "TempInCelsius", "EPMTempInCelsius",
+                                           "FrameToFrameTempInCelsius",
+                                           "FrameToFrameAttached",
+                                           "FrameToFrame5VoltEnabled",
+                                           "FansEnabled", "BackSwitchOpen",
+                                           "FilterSwitchOpen",
+                                           "FrontSwitchOpen",
+                                           "SafetyInterlockOpen",
+                                           "FrameIDInfo", "DriveFrameNum",
+                                           "SwitchedRailState",
+                                           "RobotPowerEnabled",
+                                           "InternalLightsEnabled",
+                                           "ExternalLightsEnabled"))
+                                print(frameMMFormat. \
+                                    format("-------------------------", #25
+                                           "-------------", #13
+                                           "------------", #12
+                                           "--------------", #13
+                                           "-------------------", #19
+                                           "-------------------", #19
+                                           "--------------------", #20
+                                           "----------------", #16
+                                           "------------", #12
+                                           "-------------", #13
+                                           "----------------", #16
+                                           "-------------------------", #25
+                                           "--------------------", #20
+                                           "------------------------", #24
+                                           "-----------", #12
+                                           "--------------", #14
+                                           "----------------", #16
+                                           "---------------", #15
+                                           "-------------------", #19
+                                           "-----------", #11
+                                           "-------------", #13
+                                           "-----------------", #17
+                                           "-----------------", #17
+                                           "---------------------", #21
+                                           "---------------------")) #21
+                                frameMMHeaderPrinted = True
+
+                            ID = twentyFourVoltVoltage = fiveVoltVoltage = ""
+                            fanRailVoltage = switchedRailVoltage = ""
+                            twentyFourVoltCurrentInAmps = ""
+                            powerConsumedInWatts = sampleRateInSeconds = ""
+                            samplesTaken = temperatureInCelsius = ""
+                            EPMTemperatureInCelsius = ""
+                            frameToFrameTemperatureInCelsius = ""
+                            frameToFrameAttached = ""
+                            frameToFrameFiveVoltEnabled = fansEnabled = ""
+                            backSwitchOpen = filterSwitchOpen = ""
+                            frontSwitchOpen = safetyInterlockOpen = ""
+                            frameIDInfo = driveFrameNumber = ""
+                            switchedRailState = robotPowerEnabled = ""
+                            internalLightsEnabled = externalLightsEnabled = ""
+
+                            for frameMM in ceinfo:
+                                if frameMM.tag == "ID":
+                                    ID = frameMM.text.strip()
+                                elif frameMM.tag == "twentyFourVoltVoltage":
+                                    twentyFourVoltVoltage = frameMM.text.strip()
+                                elif frameMM.tag == "fiveVoltVoltage":
+                                    fiveVoltVoltage = frameMM.text.strip()
+                                elif frameMM.tag == "fanRailVoltage":
+                                    fanRailVoltage = frameMM.text.strip()
+                                elif frameMM.tag == "switchedRailVoltage":
+                                    switchedRailVoltage = frameMM.text.strip()
+                                elif frameMM.tag == "twentyFourVoltCurrentInAmps":
+                                    twentyFourVoltCurrentInAmps = frameMM.text.strip()
+                                elif frameMM.tag == "powerConsumedInWatts":
+                                    powerConsumedInWatts = frameMM.text.strip()
+                                elif frameMM.tag == "sampleRateInSeconds":
+                                    sampleRateInSeconds = frameMM.text.strip()
+                                elif frameMM.tag == "samplesTaken":
+                                    samplesTaken = frameMM.text.strip()
+                                elif frameMM.tag == "temperatureInCelsius":
+                                    temperatureInCelsius = frameMM.text.strip()
+                                elif frameMM.tag == "EPMTemperatureInCelsius":
+                                    EPMTemperatureInCelsius = frameMM.text.strip()
+                                elif frameMM.tag == "frameToFrameTemperatureInCelsius":
+                                    frameToFrameTemperatureInCelsius = frameMM.text.strip()
+                                elif frameMM.tag == "frameToFrameAttached":
+                                    frameToFrameAttached = frameMM.text.strip()
+                                elif frameMM.tag == "frameToFrameFiveVoltEnabled":
+                                    frameToFrameFiveVoltEnabled = frameMM.text.strip()
+                                elif frameMM.tag == "fansEnabled":
+                                    fansEnabled = frameMM.text.strip()
+                                elif frameMM.tag == "backSwitchOpen":
+                                    backSwitchOpen = frameMM.text.strip()
+                                elif frameMM.tag == "filterSwitchOpen":
+                                    filterSwitchOpen = frameMM.text.strip()
+                                elif frameMM.tag == "frontSwitchOpen":
+                                    frontSwitchOpen = frameMM.text.strip()
+                                elif frameMM.tag == "safetyInterlockOpen":
+                                    safetyInterlockOpen = frameMM.text.strip()
+                                elif frameMM.tag == "frameIDInfo":
+                                    frameIDInfo = frameMM.text.strip()
+                                elif frameMM.tag == "driveFrameNumber":
+                                    driveFrameNumber = frameMM.text.strip()
+                                elif frameMM.tag == "switchedRailState":
+                                    switchedRailState = frameMM.text.strip()
+                                elif frameMM.tag == "robotPowerEnabled":
+                                    robotPowerEnabled = frameMM.text.strip()
+                                elif frameMM.tag == "internalLightsEnabled":
+                                    internalLightsEnabled = frameMM.text.strip()
+                                elif frameMM.tag == "externalLightsEnabled":
+                                    externalLightsEnabled = frameMM.text.strip()
+                                elif frameMM.tag == "fanPair":
+                                    fanNum = fanPresent = ""
+                                    for fan in frameMM:
+                                        if fan.tag == "number":
+                                            fanNum = fan.text.strip()
+                                        elif fan.tag == "present":
+                                            fanPresent = fan.text.strip()
+                                        if (fanNum != "") and (fanPresent != ""):
+                                            fanPairString = fanPairFormat. \
+                                                format(ID, fanNum, fanPresent)
+                                            fanPairStringList.append(fanPairString)
+                                            fanNum = fanPresent = ""
+                                elif frameMM.tag == "fanInFMM":
+                                    fanInFMMNum = fanSpeed = ""
+                                    for fan in frameMM:
+                                        if fan.tag == "number":
+                                            fanInFMMNum = fan.text.strip()
+                                        #ToDo: The documentation shows an "on"
+                                        #record, but I'v never seen it, so I'm
+                                        #not looking for it.
+                                        elif fan.tag == "speedInRPM":
+                                            fanSpeed = fan.text.strip()
+                                        if ( (fanInFMMNum != "") and
+                                             (fanSpeed != "") ):
+                                            fanString = fanInFMMFormat. \
+                                                format(ID, fanInFMMNum, fanSpeed)
+                                            fanInFMMStringList.append(fanString)
+                                            fanInFMMNum = fanSpeed = ""
+                                elif frameMM.tag == "powerSupplyInFMM":
+                                    position = faulted = ""
+                                    for powerSupply in frameMM:
+                                        if powerSupply.tag == "position":
+                                            position = powerSupply.text.strip()
+                                        elif powerSupply.tag == "faulted":
+                                            faulted = powerSupply.text.strip()
+                                        if (position != "") and (faulted != ""):
+                                            powerString = powerInFMMFormat. \
+                                                format(ID, position, faulted)
+                                            powerInFMMStringList.append(powerString)
+                                            position = faulted = ""
+
+                            print(frameMMFormat. \
+                                format(ID, twentyFourVoltVoltage,
+                                       fiveVoltVoltage, fanRailVoltage,
+                                       switchedRailVoltage,
+                                       twentyFourVoltCurrentInAmps,
+                                       powerConsumedInWatts,
+                                       sampleRateInSeconds, samplesTaken,
+                                       temperatureInCelsius,
+                                       EPMTemperatureInCelsius,
+                                       frameToFrameTemperatureInCelsius,
+                                       frameToFrameAttached,
+                                       frameToFrameFiveVoltEnabled,
+                                       fansEnabled, backSwitchOpen,
+                                       filterSwitchOpen, frontSwitchOpen,
+                                       safetyInterlockOpen, frameIDInfo,
+                                       driveFrameNumber, switchedRailState,
+                                       robotPowerEnabled,
+                                       internalLightsEnabled,
+                                       externalLightsEnabled))
+
+                        # service bay control modules
+                        if ceinfo.tag == "serviceBayControlModule":
+
+                            ID = frameIDInfo = safetyDoorState = ""
+                            overrideSwitch = rearAccessPanel = ""
+                            sideAccessPanel = sidePanel = ""
+                            robotInServiceFrame = bulkIEPresent = ""
+                            bulkIEDoorOpen = bulkIEAjar = ""
+                            solenoidPinPosition = bulkTAPLocation = ""
+
+                            for service in ceinfo:
+                                if service.tag == "ID":
+                                    ID = service.text.strip()
+                                elif service.tag == "frameIDInfo":
+                                    frameIDInfo = service.text.strip()
+                                elif service.tag == "overrideSwitch":
+                                    overrideSwitch = service.text.strip()
+                                elif service.tag == "rearAccessPanel":
+                                    rearAccessPanel = service.text.strip()
+                                elif service.tag == "sideAccessPanel":
+                                    sideAccessPanel = service.text.strip()
+                                elif service.tag == "sidePanel":
+                                    sidePanel = service.text.strip()
+                                elif service.tag == "robotInServiceFrame":
+                                    robotInServiceFrame = service.text.strip()
+                                elif service.tag == "bulkIEPresent":
+                                    bulkIEPresent = service.text.strip()
+                                elif service.tag == "bulkIEDoorOpen":
+                                    bulkIEDoorOpen = service.text.strip()
+                                elif service.tag == "bulkIEAjar":
+                                    bulkIEAjar = service.text.strip()
+                                elif service.tag == "solenoidPinPosition":
+                                    solenoidPinPosition = service.text.strip()
+                                elif service.tag == "bulkTAPLocation":
+                                    bulkTAPLocation = service.text.strip()
+                            serviceStringList.append( serviceFormat. \
+                                format(ID, frameIDInfo, safetyDoorState,
+                                       overrideSwitch, rearAccessPanel,
+                                       sideAccessPanel, sidePanel,
+                                       robotInServiceFrame, bulkIEPresent,
+                                       bulkIEDoorOpen, bulkIEAjar,
+                                       solenoidPinPosition, bulkTAPLocation))
+
+                    if len(fanPairStringList) > 0:
+                        print()
+                        print(fanPairFormat. \
+                            format("FrameManagementModuleID",
+                                   "FanPair#",
+                                   "FanPairPresent?"))
+                        print(fanPairFormat. \
+                            format("-------------------------",
+                                   "--------",
+                                   "---------------"))
+                        for item in fanPairStringList:
+                            print(item)
+
+                    if len(fanInFMMStringList) > 0:
+                        print()
+                        print(fanInFMMFormat. \
+                            format("FrameManagementModuleID",
+                                   "FanNum",
+                                   "FanSpeedInRPM"))
+                        print(fanInFMMFormat. \
+                            format("-------------------------",
+                                   "------",
+                                   "-------------"))
+                        for item in fanInFMMStringList:
+                            print(item)
+
+                    if len(powerInFMMStringList) > 0:
+                        print()
+                        print(powerInFMMFormat. \
+                            format("FrameManagementModuleID",
+                                   "PowerSupplyPosition",
+                                   "PowerSupplyFaulted?"))
+                        print(powerInFMMFormat. \
+                            format("-------------------------",
+                                   "-------------------",
+                                   "-------------------"))
+                        for item in powerInFMMStringList:
+                            print(item)
+
+                    # service bay control modules
+                    if len(serviceStringList) > 0:
+                        print()
+                        print(serviceFormat. \
+                            format("ServiceBayControlModuleID", "FrameIDInfo",
+                                   "SafetyDoorState", "OverrideSwitch",
+                                   "RearAccessPanel", "SideAccessPanel",
+                                   "SidePanel", "RobotInServiceFrame",
+                                   "BulkIEPresent", "BulkIEDoorOpen",
+                                   "BulkIEAjar", "SolenoidPinPosition",
+                                   "BulkTAPLocation"))
+                        print(serviceFormat. \
+                            format("-------------------------",
+                                   "-----------", #11
+                                   "---------------", #15
+                                   "--------------", #14
+                                   "---------------", #15
+                                   "---------------", #15
+                                   "---------", #9
+                                   "-------------------", #19
+                                   "-------------", #13
+                                   "--------------", #14
+                                   "----------", #10
+                                   "-------------------", #19
+                                   "---------------")) #15
+                        for item in serviceStringList:
+                            print(item)
+
+                # ECInfo component list
+                if child.tag == "ECInfo":
+                    for ecinfo in child:
+
+                        # components
+                        if ecinfo.tag == "component":
+                            if componentHeaderPrinted == False:
+                                print()
+                                print(componentFormat. \
+                                    format("ECComponentID", "EC",
+                                           "SerialNum", "TopLevelAssemblyEC",
+                                           "TopLevelAssemblySerialNum",
+                                           "Date"))
+                                print(componentFormat. \
+                                    format("-------------------------", "--",
+                                           "---------------",
+                                           "------------------",
+                                           "-------------------------",
+                                           "----------"))
+                                componentHeaderPrinted = True
+
+                            ID = EC = serialNumber = topLevelAssemblyEC = ""
+                            topLevelAssemblySerialNumber = date = ""
+
+                            for component in ecinfo:
+                                if component.tag == "ID":
+                                    ID = component.text.strip()
+                                elif component.tag == "EC":
+                                    EC = component.text.strip()
+                                elif component.tag == "serialNumber":
+                                    if component.text:
+                                        serialNumber = component.text.rstrip()
+                                    else:
+                                        serialNumber = "None"
+                                elif component.tag == "topLevelAssemblyEC":
+                                    topLevelAssemblyEC = component.text.strip()
+                                elif component.tag == "topLevelAssemblySerialNumber":
+                                    if component.text:
+                                        topLevelAssemblySerialNumber = component.text.rstrip()
+                                    else:
+                                        topLevelAssemblySerialNumber = "None"
+                                elif component.tag == "date":
+                                    date = component.text.strip()
+                            print(componentFormat. \
+                                format(ID, EC, serialNumber, topLevelAssemblyEC,
+                                       topLevelAssemblySerialNumber, date))
+
+        except Exception as e:
+            print("LibraryStatus Error: " + str(e), file=sys.stderr)
+            traceback.print_exc()
+
+
+    #--------------------------------------------------------------------------
+    #
+    # Returns the library type, serial number, component status, and engineering
+    # change level information for the library that received the command.
+    #
+    def librarystatus2(self):
 
         try:
             url  = self.baseurl + "/libraryStatus.xml"
@@ -664,7 +1532,7 @@ class SpectraLogicAPI:
                     print(child.tag, child.text, sep=': ')
 
         except Exception as e:
-            print("LibraryStatus Error: " + str(e), file=sys.stderr)
+            print("LibraryStatus2 Error: " + str(e), file=sys.stderr)
 
 
     #--------------------------------------------------------------------------
@@ -984,6 +1852,8 @@ def main():
     inventorylist_parser.add_argument('partition', action='store', help='Spectra Logic Partition')
 
     librarystatus_parser = cmdsubparsers.add_parser('librarystatus',
+        help='Returns library type, serial number, component status and engineering change level information. With Headers')
+    librarystatus2_parser = cmdsubparsers.add_parser('librarystatus2',
         help='Returns library type, serial number, component status and engineering change level information.')
 
     packagelist_parser = cmdsubparsers.add_parser('packagelist',
@@ -1033,6 +1903,8 @@ def main():
         slapi.inventorylist(args.partition)
     elif args.command == "librarystatus":
         slapi.librarystatus()
+    elif args.command == "librarystatus2":
+        slapi.librarystatus2()
     elif args.command == "packagelist":
         slapi.packagelist()
     elif args.command == "partitionlist":

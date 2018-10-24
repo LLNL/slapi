@@ -207,6 +207,31 @@ class SpectraLogicAPI:
 
     #--------------------------------------------------------------------------
     #
+    # Check autosupport progress
+    # Returns True if no pending commands; False otherwise
+    #
+    def CheckAutoSupportProgress(self):
+
+        try:
+            url = self.baseurl + "/autosupport.xml?progress"
+            tree = self.run_command(url)
+            statusRec = tree.find("status")
+            status = statusRec.text.strip()
+            if (status == "OK") or (status == "FAILED"):
+                print("The autosupport command has no pending commands. Status=", status)
+                return(True)
+            else:
+                print("New commands may not be submitted. ",
+                      "The autosupport command has a status of: ", status)
+                return(False)
+
+        except Exception as e:
+            print("CheckAutoSupportProgress Error: " + str(e), file=sys.stderr)
+            traceback.print_exc()
+
+
+    #--------------------------------------------------------------------------
+    #
     # Returns controller status, type, firmware, failover configuration, and
     # port configuration information for all controllers in the library.
     #
@@ -460,6 +485,75 @@ class SpectraLogicAPI:
 
     #--------------------------------------------------------------------------
     #
+    # Generates a new AutoSupport Log (ASL) file
+    #
+    def generateasl(self):
+
+        if not self.CheckAutoSupportProgress():
+            print("Will not issue generateasl command due to pending commands.")
+
+        try:
+            url  = self.baseurl + "/autosupport.xml?action=generateASL"
+            tree = self.run_command(url)
+            if self.longlist:
+                self.longlisting(tree, 0)
+                return
+
+            # get the immediate response
+            for child in tree:
+                if child.tag == "status":
+                    status = child.text.rstrip()
+                elif child.tag == "message":
+                    message = child.text.rstrip()
+            if status == "OK":
+                print("The autosupport generateASL command has been submitted: " + message)
+
+            url2 = self.baseurl + "/autosupport.xml?progress"
+            status = ""
+            while (status != "OK"):
+                tree = self.run_command(url2)
+                statusRec = tree.find("status")
+                status = statusRec.text.strip()
+                print(".", end='')
+                sys.stdout.flush()
+            print("\nThe autosupport generateASL command has completed.")
+
+        except Exception as e:
+            print("generateasl Error: " + str(e), file=sys.stderr)
+            traceback.print_exc()
+
+
+    #--------------------------------------------------------------------------
+    #
+    # Returns a list of the AutoSupport Log (ASL) file names currently stored
+    # on the ibrary.
+    #
+    def getaslnames(self):
+
+        try:
+            url  = self.baseurl + "/autosupport.xml?action=getASLNames"
+            tree = self.run_command(url)
+            print("\nAutoSupport Log (ASL) File Names: <HardwareID Date Time>")
+            print(  "--------------------------------------------------------")
+            if self.longlist:
+                self.longlisting(tree, 0)
+                return
+
+            for aslNames in tree:
+                if len(aslNames) == 0:
+                    print("None - Perhaps you need to generate some?")
+                    return
+                for aslName in aslNames:
+                    if aslName.tag == "ASLName":
+                        print(aslName.text.rstrip())
+
+        except Exception as e:
+            print("getaslnames Error: " + str(e), file=sys.stderr)
+            traceback.print_exc()
+
+
+    #--------------------------------------------------------------------------
+    #
     # Using an inputed driveID (format from drivelist ID), this routine will
     # get the drive load count for the driveID. Upon success, it returns the
     # load count, otherwise, it returns the string "INVALID".
@@ -476,6 +570,7 @@ class SpectraLogicAPI:
                 if count.tag == "loadCount":
                     loadCount = count.text.rstrip()
         return(loadCount)
+
 
     #--------------------------------------------------------------------------
     #
@@ -719,6 +814,8 @@ class SpectraLogicAPI:
                                topHAXSolenoid, bottomHAXSolenoid))
 
                 # excessiveMoveFailures list
+                # NOTE: wasn't able to test on NERF Tfinity as it
+                # currently doesn't have any excessiveMoveFailures
                 if child.tag == "excessiveMoveFailures":
                     print("\nExcessive Move Failures:")
                     print(moveFormat. \
@@ -1005,7 +1102,7 @@ class SpectraLogicAPI:
 
 
                         # fan control modules
-                        # Note: wasn't able to test on NERF Tfinity as it
+                        # NOTE: wasn't able to test on NERF Tfinity as it
                         # apparently doesn't have any fan control modules!
                         if ceinfo.tag == "fanControlModule":
                             if fanCMHeaderPrinted == False:
@@ -1621,7 +1718,7 @@ class SpectraLogicAPI:
     #
     # Returns a list of all the partitions configured in the library.
     #
-    # **Note** This command is different from "partition.xml?action=list"
+    # **NOTE** This command is different from "partition.xml?action=list"
     #          which lists all existing partitions including details such as
     #          partition type, size, assigned drives, etc.
     #
@@ -1844,6 +1941,12 @@ def main():
     etherlibstatus_parser = cmdsubparsers.add_parser('etherlibstatus',
         help='Retrieve status of the library EtherLib connections.')
 
+    generateasl_parser = cmdsubparsers.add_parser('generateasl',
+        help='Generates a new AutoSupport Log (ASL) file')
+
+    getaslnames_parser = cmdsubparsers.add_parser('getaslnames',
+        help='Returns a list of the AutoSupport Log (ASL) file names currently stored on the library.')
+
     hhmdata_parser = cmdsubparsers.add_parser('hhmdata',
         help='Returns a report showing the current data for all of the Hardware Health Monitoring (HHM) counters for the library.')
 
@@ -1897,6 +2000,10 @@ def main():
         slapi.drivelist()
     elif args.command == "etherlibstatus":
         slapi.etherlibstatus()
+    elif args.command == "generateasl":
+        slapi.generateasl()
+    elif args.command == "getaslnames":
+        slapi.getaslnames()
     elif args.command == "hhmdata":
         slapi.hhmdata()
     elif args.command == "inventorylist":

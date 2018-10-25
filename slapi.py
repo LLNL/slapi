@@ -207,27 +207,30 @@ class SpectraLogicAPI:
 
     #--------------------------------------------------------------------------
     #
-    # Check autosupport progress
+    # Check command progress
     # Returns True if no pending commands; False otherwise
     #
-    def CheckAutoSupportProgress(self):
+    def CheckCommandProgress(self, command):
 
         try:
-            url = self.baseurl + "/autosupport.xml?progress"
+            url = self.baseurl + "/" + command + ".xml?progress"
             tree = self.run_command(url)
             statusRec = tree.find("status")
             status = statusRec.text.strip()
             if (status == "OK") or (status == "FAILED"):
-                print("The autosupport command has no pending commands. Status=", status)
+                print("The '", command, 
+                      "' command has no pending commands. Status=", status)
                 return(True)
             else:
                 print("New commands may not be submitted. ",
-                      "The autosupport command has a status of: ", status)
+                      "The '", command,
+                      "' command has a status of: ", status)
                 return(False)
 
         except Exception as e:
-            print("CheckAutoSupportProgress Error: " + str(e), file=sys.stderr)
-            traceback.print_exc()
+            print("CheckCommandProgress Error: " + str(e), file=sys.stderr)
+            if (self.verbose):
+                traceback.print_exc()
 
 
     #--------------------------------------------------------------------------
@@ -293,6 +296,8 @@ class SpectraLogicAPI:
 
         except Exception as e:
             print("ControllersList Error: " + str(e), file=sys.stderr)
+            if (self.verbose):
+                traceback.print_exc()
 
 
     #--------------------------------------------------------------------------
@@ -343,6 +348,7 @@ class SpectraLogicAPI:
                 sparedWith = spareFor = sparePotential = ""
                 firmwareStaging = ""
                 loadCount = ""
+                prettyWWN = ""
                 for element in drive:
                     if element.tag == "ID":
                         myid = element.text.rstrip()
@@ -403,6 +409,9 @@ class SpectraLogicAPI:
                         dcmFW = element.text.rstrip()
                     elif element.tag == "wwn":
                         wwn = element.text.rstrip()
+                        # make the wwn's pretty for Todd; he likes colons better
+                        # than the default space delimiters.
+                        prettyWWN = wwn.replace(" ", ":")
                     elif element.tag == "fibreAddress":
                         fibreAddress = element.text.rstrip()
                     elif element.tag == "loopNumber":
@@ -436,12 +445,14 @@ class SpectraLogicAPI:
                 print(driveFormat. \
                     format(myid, status, partition, paritionDriveNum, driveType,
                            serialNum, manuSerialNum, driveFW,
-                           dcmFW, wwn, fibreAddress, loopNum, health, loadCount,
+                           dcmFW, prettyWWN, fibreAddress, loopNum, health, loadCount,
                            sparedWith, spareFor, sparePotential,
                            firmwareStaging) )
 
         except Exception as e:
             print("DriveList Error: " + str(e), file=sys.stderr)
+            if (self.verbose):
+                traceback.print_exc()
 
 
     #--------------------------------------------------------------------------
@@ -481,6 +492,8 @@ class SpectraLogicAPI:
 
         except Exception as e:
             print("EtherLibStatus Error: " + str(e), file=sys.stderr)
+            if (self.verbose):
+                traceback.print_exc()
 
 
     #--------------------------------------------------------------------------
@@ -489,15 +502,12 @@ class SpectraLogicAPI:
     #
     def generateasl(self):
 
-        if not self.CheckAutoSupportProgress():
+        if not self.CheckCommandProgress("autosupport"):
             print("Will not issue generateasl command due to pending commands.")
 
         try:
             url  = self.baseurl + "/autosupport.xml?action=generateASL"
             tree = self.run_command(url)
-            if self.longlist:
-                self.longlisting(tree, 0)
-                return
 
             # get the immediate response
             for child in tree:
@@ -520,7 +530,113 @@ class SpectraLogicAPI:
 
         except Exception as e:
             print("generateasl Error: " + str(e), file=sys.stderr)
-            traceback.print_exc()
+            if (self.verbose):
+                traceback.print_exc()
+
+
+    #--------------------------------------------------------------------------
+    #
+    # Generate a new drive trace file
+    #
+    # Notes:
+    # - This action was added with BlueScale12.4.1.
+    # - This command is not supported for TS11x0 drives.
+    # - This command can only be used for LTO-5 and later generation drives.
+    #
+    def generatedrivetrace(self, driveID):
+
+        # validate the drive ID
+        url  = self.baseurl + "/driveList.xml?action=list"
+        tree = self.run_command(url)
+        foundIt = False
+        for element in tree:
+            for drive in element:
+                if drive.tag == "ID":
+                    tempDrive = drive.text.strip()
+                    if (tempDrive == driveID):
+                        foundIt = True
+
+        if not foundIt:
+            print("Error: The input drive (" + driveID + ") is not a valid drive.")
+            return
+
+        if driveID.find("LTO") == -1:
+            print("Error: The input drive (" + driveID +
+                  ") is not a valid LTO drive. This command only works on LTO drives.")
+            return
+
+        if not self.CheckCommandProgress("driveList"):
+            print("Will not issue generatedrivetrace command due to pending commands.")
+
+        try:
+            url  = self.baseurl + "/driveList.xml?action=generateDriveTraces&driveTracesDrives=" + driveID
+            tree = self.run_command(url)
+
+            # get the immediate response
+            for child in tree:
+                if child.tag == "status":
+                    status = child.text.rstrip()
+                elif child.tag == "message":
+                    message = child.text.rstrip()
+            if status == "OK":
+                print("The driveList generateDriveTraces command has been submitted: " + message)
+
+            url2 = self.baseurl + "/driveList.xml?progress"
+            status = ""
+            while (status != "OK"):
+                tree = self.run_command(url2)
+                statusRec = tree.find("status")
+                status = statusRec.text.strip()
+                print(".", end='')
+                sys.stdout.flush()
+            print("\nThe driveList generateDriveTraces command has completed.")
+
+        except Exception as e:
+            print("generatedrivetrace Error: " + str(e), file=sys.stderr)
+            if (self.verbose):
+                traceback.print_exc()
+
+
+    #--------------------------------------------------------------------------
+    #
+    # Retrieves the specified ASL file from the library
+    #
+    def getaslfile(self, filename):
+
+        #TODO: this command is currently broken (10/24/18); question into Spectra
+        try:
+            url  = self.baseurl + "/autosupport.xml?action=getASL&name=" + filename
+            #tree = self.run_command(url)
+            #self.longlisting(tree, 0)
+
+            # FIXME someday...
+            # The libraries currently use self-signed certs
+            # Do not verify the certificate for now...
+            ssl._create_default_https_context = ssl._create_unverified_context
+            opener    = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.cookiejar))
+            opener.addheaders.append(("Cookie", "sessionID=" + self.sessionid))
+            request   = urllib.request.Request(url)
+            response  = opener.open(request)
+            xmldoc    = response.read()
+
+            f = open('autosupport.zip', 'wb')
+            f.write(xmldoc)
+            f.close()
+
+            with open('autosupport.zip') as f:
+                readData = f.read()
+            f.closed
+
+            if readData.find("syntaxError") != -1:
+                print("XML is reporting a syntaxError.")
+                print("The XML error message response was put into file: 'autosupport.zip'")
+            else:
+                print("Successfully created: 'autosupport.zip'")
+
+        except Exception as e:
+            print("getaslfile Error: " + str(e), file=sys.stderr)
+            if (self.verbose):
+                traceback.print_exc()
 
 
     #--------------------------------------------------------------------------
@@ -549,7 +665,8 @@ class SpectraLogicAPI:
 
         except Exception as e:
             print("getaslnames Error: " + str(e), file=sys.stderr)
-            traceback.print_exc()
+            if (self.verbose):
+                traceback.print_exc()
 
 
     #--------------------------------------------------------------------------
@@ -570,6 +687,38 @@ class SpectraLogicAPI:
                 if count.tag == "loadCount":
                     loadCount = count.text.rstrip()
         return(loadCount)
+
+
+    #--------------------------------------------------------------------------
+    #
+    # Retrieves the last drive trace file generated by the generateDriveTraces
+    # action. Upon success, a file named "drivetraces.zip" will be written to
+    # the current working directory.
+    #
+    def getdrivetraces(self):
+
+        try:
+            url  = self.baseurl + "/driveList.xml?action=getDriveTraces&driveTracesGetType=download"
+
+            # FIXME someday...
+            # The libraries currently use self-signed certs
+            # Do not verify the certificate for now...
+            ssl._create_default_https_context = ssl._create_unverified_context
+            opener    = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.cookiejar))
+            opener.addheaders.append(("Cookie", "sessionID=" + self.sessionid))
+            request   = urllib.request.Request(url)
+            response  = opener.open(request)
+
+            f = open('drivetraces.zip', 'wb')
+            f.write(response.read())
+            f.close()
+
+            print("Successfully created: 'drivetraces.zip'")
+
+        except Exception as e:
+            print("getdrivetraces Error: " + str(e), file=sys.stderr)
+            if (self.verbose):
+                traceback.print_exc()
 
 
     #--------------------------------------------------------------------------
@@ -639,6 +788,8 @@ class SpectraLogicAPI:
 
         except Exception as e:
             print("hhmdata Error: " + str(e), file=sys.stderr)
+            if (self.verbose):
+                traceback.print_exc()
 
 
     #--------------------------------------------------------------------------
@@ -689,6 +840,8 @@ class SpectraLogicAPI:
 
         except Exception as e:
             print("InventoryList Error: " + str(e), file=sys.stderr)
+            if (self.verbose):
+                traceback.print_exc()
 
 
     #--------------------------------------------------------------------------
@@ -1558,7 +1711,8 @@ class SpectraLogicAPI:
 
         except Exception as e:
             print("LibraryStatus Error: " + str(e), file=sys.stderr)
-            traceback.print_exc()
+            if (self.verbose):
+                traceback.print_exc()
 
 
     #--------------------------------------------------------------------------
@@ -1630,6 +1784,8 @@ class SpectraLogicAPI:
 
         except Exception as e:
             print("LibraryStatus2 Error: " + str(e), file=sys.stderr)
+            if (self.verbose):
+                traceback.print_exc()
 
 
     #--------------------------------------------------------------------------
@@ -1660,6 +1816,8 @@ class SpectraLogicAPI:
 
         except Exception as e:
             print("Login Error: " + str(e), file=sys.stderr)
+            if (self.verbose):
+                traceback.print_exc()
 
 
     #--------------------------------------------------------------------------
@@ -1712,6 +1870,8 @@ class SpectraLogicAPI:
 
         except Exception as e:
             print("packagelist Error: " + str(e), file=sys.stderr)
+            if (self.verbose):
+                traceback.print_exc()
 
 
     #--------------------------------------------------------------------------
@@ -1738,6 +1898,8 @@ class SpectraLogicAPI:
 
         except Exception as e:
             print("PartitionList Error: " + str(e), file=sys.stderr)
+            if (self.verbose):
+                traceback.print_exc()
 
 
     #--------------------------------------------------------------------------
@@ -1809,6 +1971,8 @@ class SpectraLogicAPI:
 
         except Exception as e:
             print("systemMessages Error: " + str(e), file=sys.stderr)
+            if (self.verbose):
+                traceback.print_exc()
 
 
     #--------------------------------------------------------------------------
@@ -1893,6 +2057,8 @@ class SpectraLogicAPI:
 
         except Exception as e:
             print("taskList  Error: " + str(e), file=sys.stderr)
+            if (self.verbose):
+                traceback.print_exc()
 
 
 #==============================================================================
@@ -1944,8 +2110,19 @@ def main():
     generateasl_parser = cmdsubparsers.add_parser('generateasl',
         help='Generates a new AutoSupport Log (ASL) file')
 
+    generatedrivetrace_parser = cmdsubparsers.add_parser('generatedrivetrace',
+        help='Generates a new drive trace file')
+    generatedrivetrace_parser.add_argument('driveID', action='store', help='LTO Drive ID')
+
+    getaslfile_parser = cmdsubparsers.add_parser('getaslfile',
+        help='Retrieves the specified AutoSupport Log (ASL) file from the library.')
+    getaslfile_parser.add_argument('filename', action='store', help='AutoSupport Log file')
+
     getaslnames_parser = cmdsubparsers.add_parser('getaslnames',
         help='Returns a list of the AutoSupport Log (ASL) file names currently stored on the library.')
+
+    getdrivetraces_parser = cmdsubparsers.add_parser('getdrivetraces',
+        help='Returns the last drive trace file generated by the generateDriveTraces action. The command returns a ZIP file in your cwd.')
 
     hhmdata_parser = cmdsubparsers.add_parser('hhmdata',
         help='Returns a report showing the current data for all of the Hardware Health Monitoring (HHM) counters for the library.')
@@ -2002,8 +2179,14 @@ def main():
         slapi.etherlibstatus()
     elif args.command == "generateasl":
         slapi.generateasl()
+    elif args.command == "generatedrivetrace":
+        slapi.generatedrivetrace(args.driveID)
+    elif args.command == "getaslfile":
+        slapi.getaslfile(args.filename)
     elif args.command == "getaslnames":
         slapi.getaslnames()
+    elif args.command == "getdrivetraces":
+        slapi.getdrivetraces()
     elif args.command == "hhmdata":
         slapi.hhmdata()
     elif args.command == "inventorylist":

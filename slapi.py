@@ -600,14 +600,14 @@ class SpectraLogicAPI:
     #--------------------------------------------------------------------------
     #
     # Retrieves the specified ASL file from the library
+    # Outputs a filename in the current working directory that is the ASL file
+    # name with "_" replacing spaces and ending in .zip.
     #
     def getaslfile(self, filename):
 
-        #TODO: this command is currently broken (10/24/18); question into Spectra
         try:
-            url  = self.baseurl + "/autosupport.xml?action=getASL&name=" + filename
-            #tree = self.run_command(url)
-            #self.longlisting(tree, 0)
+            # replace the spaces in the file name with %20 using a urllib module
+            url  = self.baseurl + "/autosupport.xml?action=getASL&name=" + urllib.parse.quote(filename)
 
             # FIXME someday...
             # The libraries currently use self-signed certs
@@ -619,19 +619,33 @@ class SpectraLogicAPI:
             response  = opener.open(request)
             xmldoc    = response.read()
 
-            f = open('autosupport.zip', 'wb')
+            # Write the data to a file in the current working directory.
+            # The name of the file is the same as the ASL name except:
+            # - replace spaces with underscores
+            # - append with .zip since it's a zip file.
+            outputFilename = filename.replace(" ","_") + ".zip"
+            f = open(outputFilename, 'wb')
             f.write(xmldoc)
             f.close()
 
-            with open('autosupport.zip') as f:
-                readData = f.read()
-            f.closed
+            try:
+                tree = xml.etree.ElementTree.fromstring(xmldoc)
+                if tree.tag == "error":
+                    for child in tree:
+                        if (child.text.find("Error: No active session found.") >= 0):
+                            raise(SpectraLogicLoginError("Error: No active session found."))
 
-            if readData.find("syntaxError") != -1:
-                print("XML is reporting a syntaxError.")
-                print("The XML error message response was put into file: 'autosupport.zip'")
-            else:
-                print("Successfully created: 'autosupport.zip'")
+                    errstr = ""
+                    for child in tree:
+                        errstr = errstr + child.tag + ": " + child.text + "\n"
+                    raise(Exception(errstr))
+            except Exception as exc:
+                # if we get an exception trying to look at the xlm, then that
+                # means we most likely got a good file!
+                if (self.verbose):
+                    print("getaslfile: No error tags in data")
+
+            print("Successfully created: '" + outputFilename + "'")
 
         except Exception as e:
             print("getaslfile Error: " + str(e), file=sys.stderr)

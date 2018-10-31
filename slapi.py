@@ -142,10 +142,56 @@ class SpectraLogicAPI:
                 print("", file=sys.stderr)
 
             # FIXME someday...
-            # The libraries currently use self-signed certs
-            # Do not verify the certificate for now...
-            ssl._create_default_https_context = ssl._create_unverified_context
-            opener    = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.cookiejar))
+            #
+            # The libraries currently use self-signed certs Do not verify the
+            # certificate for now...  Also use medium encryption cipher suite
+            # At come point we should be able to completely get rid of the code
+            # for setting the cipher.
+            #
+            # Explanations for the cipher names
+            #
+            # HIGH
+            #
+            # "High" encryption cipher suites. This currently means those with
+            # key lengths larger than 128 bits, and some cipher suites with
+            # 128-bit keys.
+            #
+            # MEDIUM
+            #
+            # "Medium" encryption cipher suites, currently some of those using
+            # 128 bit encryption.
+            #
+            # LOW
+            #
+            # "Low" encryption cipher suites, currently those using 64 or 56
+            # bit encryption algorithms but excluding export cipher suites. All
+            # these cipher suites have been removed as of OpenSSL 1.1.0.
+            #
+            # eNULL, NULL
+            #
+            # The "NULL" ciphers that is those offering no encryption. Because
+            # these offer no encryption at all and are a security risk they are
+            # not enabled via either the DEFAULT or ALL cipher strings. Be
+            # careful when building cipherlists out of lower-level primitives
+            # such as kRSA or aECDSA as these do overlap with the eNULL
+            # ciphers. When in doubt, include !eNULL in your cipherlist.
+            #
+            # aNULL
+            #
+            # The cipher suites offering no authentication. This is currently
+            # the anonymous DH algorithms and anonymous ECDH algorithms. These
+            # cipher suites are vulnerable to "man in the middle" attacks and
+            # so their use is discouraged. These are excluded from the DEFAULT
+            # ciphers, but included in the ALL ciphers. Be careful when
+            # building cipherlists out of lower-level primitives such as kDHE
+            # or AES as these do overlap with the aNULL ciphers. When in doubt,
+            # include !aNULL in your cipherlist.
+ 
+            context = ssl._create_unverified_context()
+            #context.set_ciphers('HIGH:!aNULL:!eNULL')
+            context.set_ciphers('MEDIUM:!aNULL:!eNULL')
+
+            opener    = urllib.request.build_opener(urllib.request.HTTPSHandler(context=context), urllib.request.HTTPCookieProcessor(self.cookiejar))
             opener.addheaders.append(("Cookie", "sessionID=" + self.sessionid))
             request   = urllib.request.Request(url)
             response  = opener.open(request)

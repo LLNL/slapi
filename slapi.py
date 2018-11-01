@@ -24,6 +24,8 @@ class SpectraLogicLoginError(Exception):
 
 class SpectraLogicAPI:
 
+    #--------------------------------------------------------------------------
+    #
     def __init__(self, args):
         self.server     = args.server
         self.user       = args.user
@@ -41,6 +43,8 @@ class SpectraLogicAPI:
             self.baseurl    = "http://" + args.server + "/gf"
 
 
+    #--------------------------------------------------------------------------
+    #
     def slapidirectory(self):
 
         home = os.path.expanduser('~')
@@ -64,6 +68,9 @@ class SpectraLogicAPI:
             except OSError as e:
                 raise(e)
 
+
+    #--------------------------------------------------------------------------
+    #
     def cookie_is_old(self):
 
         try:
@@ -78,6 +85,33 @@ class SpectraLogicAPI:
         except Exception as e:
             return(True)
 
+    #--------------------------------------------------------------------------
+    #
+    # Creates a string of xml output as a one item per line hierarchy.
+    # Similar to long_listing but going to a string instead of printing.
+    # Helpful for XML error markup.
+    #
+    def get_all_text(self, element, inputString):
+
+        # add the name of the element
+        outputString = inputString + element.tag
+
+        # add the text of the element; "None" if no text
+        if element.text:
+            outputString = outputString + ": " + element.text.rstrip()
+        else:
+            outputString = outputString + ": None"
+        outputString = outputString + "\n"
+
+        # recurse to the next level of elements
+        for subelem in element:
+            outputString = self.get_all_text(subelem, outputString)
+
+        return(outputString)
+
+
+    #--------------------------------------------------------------------------
+    #
     def load_cookie(self):
 
         try:
@@ -107,7 +141,7 @@ class SpectraLogicAPI:
     # Prints xml output as a one item per line hierarchy. Similar to XML output,
     # but without all the XML markup.
     #
-    def longlisting(self, element, level):
+    def long_listing(self, element, level):
 
         # add two spaces for each level
         for i in range(level):
@@ -124,12 +158,33 @@ class SpectraLogicAPI:
 
         # recurse to the next level of elements
         for subelem in element:
-            self.longlisting(subelem, (level+1))
+            self.long_listing(subelem, (level+1))
 
 
     #--------------------------------------------------------------------------
     #
-    # Runs the XML comand
+    # This routine pretty prints the XML document to stderr if the verbose
+    # flag is on.
+    #
+    def print_xml_document(self, xmldoc):
+
+        if self.verbose:
+            print("--------------------------------------------------", file=sys.stderr)
+            print("XML Document:", file=sys.stderr)
+            xmlstr = xml.dom.minidom.parseString(xmldoc).toprettyxml(indent="   ")
+            xmllines = xmlstr.splitlines()
+            for line in xmllines:
+                line = line.rstrip()
+                if line != "":
+                    print(line, file=sys.stderr)
+            print("--------------------------------------------------", file=sys.stderr)
+            print("", file=sys.stderr)
+
+
+    #--------------------------------------------------------------------------
+    #
+    # Runs the XML command
+    # Returns an XML element tree
     #
     def run_command(self, url):
 
@@ -152,52 +207,107 @@ class SpectraLogicAPI:
             xmldoc    = response.read()
             tree      = xml.etree.ElementTree.fromstring(xmldoc)
 
-            if self.verbose:
-                print("--------------------------------------------------", file=sys.stderr)
-                print("XML Document:", file=sys.stderr)
-                xmlstr = xml.dom.minidom.parseString(xmldoc).toprettyxml(indent="   ")
-                xmllines = xmlstr.splitlines()
-                for line in xmllines:
-                    line = line.rstrip()
-                    if line != "":
-                        print(line, file=sys.stderr)
-                print("--------------------------------------------------", file=sys.stderr)
-                print("", file=sys.stderr)
+            # Pretty print the XML document if verbose on
+            self.print_xml_document(xmldoc)
 
-            if tree.tag == "error":
-                for child in tree:
-                    if (child.text.find("Error: No active session found.") >= 0):
-                        raise(SpectraLogicLoginError("Error: No active session found."))
-
-                errstr = ""
-                for child in tree:
-                    errstr = errstr + child.tag + ": " + child.text + "\n"
-                raise(Exception(errstr))
-
-            tree = xml.etree.ElementTree.fromstring(xmldoc)
-            return(tree)
-
-        except SpectraLogicLoginError as e:
-
+            # check_for_error will raise an exception if it encounters a problem
             try:
+                self.check_for_error(tree)
+                return(tree)
+            except SpectraLogicLoginError as e:
+                try:
+                    if (self.verbose):
+                        print("Loginerror: Raised: " +
+                            str(SpectraLogicLoginError.LoginErrorRaised),
+                            file=sys.stderr)
 
-                if (self.verbose):
-                    print("Loginerror: Raised: " + str(SpectraLogicLoginError.LoginErrorRaised), file=sys.stderr)
-
-                if SpectraLogicLoginError.LoginErrorRaised == False:
-                    SpectraLogicLoginError.LoginErrorRaised = True
-                    self.login()
-                    return(self.run_command(url))
-                else:
+                    if SpectraLogicLoginError.LoginErrorRaised == False:
+                        SpectraLogicLoginError.LoginErrorRaised = True
+                        if (self.verbose):
+                            print("Re-issuing login")
+                        self.login()
+                        if (self.verbose):
+                            print("Re-running command")
+                        return(self.run_command(url))
+                    else:
+                        raise(e)
+                except Exception as e:
                     raise(e)
-
             except Exception as e:
                 raise(e)
 
         except Exception as e:
             raise(e)
 
+    #--------------------------------------------------------------------------
+    #
+    # Runs the XML command
+    # Returns the data as a string
+    #
+    def run_command_string(self, url):
 
+        try:
+
+            if self.verbose:
+                print("--------------------------------------------------", file=sys.stderr)
+                print("Command: " + url, file=sys.stderr)
+                print("--------------------------------------------------", file=sys.stderr)
+                print("", file=sys.stderr)
+
+            # FIXME someday...
+            # The libraries currently use self-signed certs
+            # Do not verify the certificate for now...
+            ssl._create_default_https_context = ssl._create_unverified_context
+            opener    = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.cookiejar))
+            opener.addheaders.append(("Cookie", "sessionID=" + self.sessionid))
+            request   = urllib.request.Request(url)
+            response  = opener.open(request)
+            xmldoc    = response.read()
+
+            # If we got an error from running the command, then we will be able
+            # to successfully put into a tree and check for error records.
+            checkerror = False
+            try:
+                tree = xml.etree.ElementTree.fromstring(xmldoc)
+                checkerror = True
+
+                # Pretty print the XML document if verbose on
+                self.print_xml_document(xmldoc)
+
+            except Exception as e:
+                # It's okay if we couldn't turn the xmldoc into a tree; means
+                # we've got some good binary data
+                checkerror = False
+
+            if checkerror:
+                try:
+                    self.check_for_error(tree)
+                except SpectraLogicLoginError as e:
+                    try:
+                        if (self.verbose):
+                            print("Loginerror: Raised: " +
+                                str(SpectraLogicLoginError.LoginErrorRaised),
+                                file=sys.stderr)
+
+                        # If we haven't already had a login error, then login
+                        # and retry the command
+                        if SpectraLogicLoginError.LoginErrorRaised == False:
+                            SpectraLogicLoginError.LoginErrorRaised = True
+                            self.login()
+                            return(self.run_command_string(url))
+                        else:
+                            raise(e)
+                    except Exception as e:
+                        raise(e)
+                except Exception as e:
+                    raise(e)
+
+            else:
+                # Return the data as a string
+                return(xmldoc)
+
+        except Exception as e:
+            raise(e)
 
 
     #==========================================================================
@@ -209,28 +319,79 @@ class SpectraLogicAPI:
     #
     # Check command progress
     # Returns True if no pending commands; False otherwise
+    # verbose=True will cause messages regarding success/failure to be printed
     #
-    def CheckCommandProgress(self, command):
+    def check_command_progress(self, command, verbose):
 
         try:
             url = self.baseurl + "/" + command + ".xml?progress"
             tree = self.run_command(url)
             statusRec = tree.find("status")
             status = statusRec.text.strip()
-            if (status == "OK") or (status == "FAILED"):
-                print("The '", command, 
-                      "' command has no pending commands. Status=", status)
+            if (status == "OK"):
+                if verbose:
+                    print("The '", command,
+                          "' command has no pending commands. Status=", status)
                 return(True)
+            elif (status == "FAILED"):
+                errorText = "Error: The '" + command + "' command FAILED"
+                raise(Exception(errorText))
             else:
-                print("New commands may not be submitted. ",
-                      "The '", command,
-                      "' command has a status of: ", status)
+                if verbose:
+                    print("New commands may not be submitted. ",
+                          "The '", command,
+                          "' command has a status of: ", status)
                 return(False)
 
         except Exception as e:
-            print("CheckCommandProgress Error: " + str(e), file=sys.stderr)
             if (self.verbose):
+                print("check_command_progress Error: " + str(e), file=sys.stderr)
                 traceback.print_exc()
+            raise(e)
+
+
+    #--------------------------------------------------------------------------
+    #
+    # Checks for system error ("error" record) or syntax error ("syntaxError"
+    # record) and raises an exception if it found any; otherwise it returns
+    # false. The exception will contain the system/syntax error message.
+    #
+    # Raises the following exceptions:
+    # - Exception: system/syntax error
+    # - SpectraLogicLoginError: no active session found
+    #
+    def check_for_error(self, tree):
+
+        try:
+            # If there aren't any records, then no errors
+            if len(tree) == 0:
+                return(False)
+
+            # Check for system error
+            if tree.tag == "error":
+                for child in tree:
+                    if (child.text.find("Error: No active session found.") >= 0):
+                        raise(SpectraLogicLoginError("Error: No active session found."))
+                errstr = ""
+                errstr = self.get_all_text(tree, errstr)
+                raise(Exception(errstr))
+
+            # Check for syntax error
+            if tree.tag == "syntaxError":
+                errstr = ""
+                errstr = self.get_all_text(tree, errstr)
+                raise(Exception(errstr))
+
+        except SpectraLogicLoginError as e:
+            raise(e)
+
+        except Exception as e:
+            if (self.verbose):
+                print("check_for_error Error: " + str(e), file=sys.stderr)
+                traceback.print_exc()
+            raise(Exception(e))
+
+        return(False)
 
 
     #--------------------------------------------------------------------------
@@ -248,7 +409,7 @@ class SpectraLogicAPI:
             print("\nControllers List")
             print("----------------")
             if self.longlist:
-                self.longlisting(tree, 0)
+                self.long_listing(tree, 0)
                 return
             print(listFormat. \
                 format("ID", "Status", "Firmware",
@@ -302,6 +463,84 @@ class SpectraLogicAPI:
 
     #--------------------------------------------------------------------------
     #
+    # Display the current firmware version installed on individual components
+    # in the library along with the firmware version included in the currently
+    # installed BlueScale package version.
+    #
+    # Note: This action was added with BlueScale12.7.02.
+    #
+    def displaypackagedetails(self):
+
+        headerFormat = '{:30} {:23} {:26}'
+        listFormat = '{:25} {:25} {:25} {:13}'
+
+        try:
+            url  = self.baseurl + "/package.xml?action=displayPackageDetails"
+            tree = self.run_command(url)
+            print("\nPackage Details")
+            print(  "----------------")
+            if self.longlist:
+                self.long_listing(tree, 0)
+                return
+            if len(tree) == 0:
+                print("None")
+                return
+
+            print(headerFormat. \
+                format("PackageName", "AllComponentsUpToDate?",
+                       "AllComponentsFullyStaged?"))
+            print(listFormat. \
+                format("------------------------------",
+                       "-----------------------",
+                       "--------------------------"))
+
+            headersPrinted = False
+
+            for pkg in tree:
+                if pkg.tag == "packageName":
+                    packageName = pkg.text.rstrip()
+                elif pkg.tag == "allComponentsUpToDate":
+                    allComponentsUpToDate = pkg.text.rstrip()
+                elif pkg.tag == "allComponentsFullyStaged":
+                    allComponentsFullyStaged = pkg.text.rstrip()
+                elif pkg.tag == "component":
+                    if not headersPrinted:
+                        print(headerFormat. \
+                            format(packageName, allComponentsUpToDate,
+                                allComponentsFullyStaged))
+                        print()
+                        print(listFormat. \
+                            format("ComponentName", "CurrentVersion",
+                                "PackageVersion", "FullyStaged?"))
+                        print(listFormat. \
+                            format("-------------------------",
+                                "-------------------------",
+                                "--------------------------",
+                                "-------------"))
+                        headersPrinted = True
+
+                    name = currentVersion = packageVersion = fullyStaged = ""
+                    for component in pkg:
+                        if component.tag == "name":
+                            name = component.text.rstrip()
+                        elif component.tag == "currentVersion":
+                            currentVersion = component.text.rstrip()
+                        elif component.tag == "packageVersion":
+                            packageVersion = component.text.rstrip()
+                        elif component.tag == "fullyStaged":
+                            fullyStaged = component.text.rstrip()
+                    print(listFormat. \
+                        format(name, currentVersion, packageVersion,
+                               fullyStaged))
+
+        except Exception as e:
+            print("displayPackageDetails Error: " + str(e), file=sys.stderr)
+            if (self.verbose):
+                traceback.print_exc()
+
+
+    #--------------------------------------------------------------------------
+    #
     # Returns detailed information about each of the drives in the library.
     #
     def drivelist(self):
@@ -314,7 +553,7 @@ class SpectraLogicAPI:
             print("\nDrive List")
             print("----------")
             if self.longlist:
-                self.longlisting(tree, 0)
+                self.long_listing(tree, 0)
                 print("\ngetDriveLoadCount:");
                 for drive in tree:
                     for element in drive:
@@ -322,7 +561,7 @@ class SpectraLogicAPI:
                             myid = element.text.rstrip()
                             print("  drive:")
                             print("    ID: " + myid);
-                            loadCount = self.GetDriveLoadCount(myid)
+                            loadCount = self.get_drive_load_count(myid)
                             print("    loadCount: " + loadCount);
                 return
             print(driveFormat. \
@@ -360,7 +599,7 @@ class SpectraLogicAPI:
                         # the drive has never been loaded since the firmware
                         # update. So told me to load/unload. I tried that, but
                         # am now having HW problems.
-                        loadCount = self.GetDriveLoadCount(myid)
+                        loadCount = self.get_drive_load_count(myid)
 
                         #try:
                         #    url2 = self.baseurl + "/driveList.xml?action=getDriveLoadCount&driveName=" + "FR2/DBA1/fLTO-DRV1"
@@ -470,7 +709,7 @@ class SpectraLogicAPI:
             print("\nEtherLib Status")
             print("---------------")
             if self.longlist:
-                self.longlisting(tree, 0)
+                self.long_listing(tree, 0)
                 return
             print(listFormat. \
                 format("ID", "Target", "Connected"))
@@ -502,8 +741,9 @@ class SpectraLogicAPI:
     #
     def generateasl(self):
 
-        if not self.CheckCommandProgress("autosupport"):
+        if not self.check_command_progress("autosupport", True):
             print("Will not issue generateasl command due to pending commands.")
+            return
 
         try:
             url  = self.baseurl + "/autosupport.xml?action=generateASL"
@@ -518,14 +758,17 @@ class SpectraLogicAPI:
             if status == "OK":
                 print("The autosupport generateASL command has been submitted: " + message)
 
-            url2 = self.baseurl + "/autosupport.xml?progress"
-            status = ""
-            while (status != "OK"):
-                tree = self.run_command(url2)
-                statusRec = tree.find("status")
-                status = statusRec.text.strip()
-                print(".", end='')
-                sys.stdout.flush()
+            # poll for autosupport generateASL to be done
+            try:
+                while (not self.check_command_progress("autosupport", False)):
+                    # put out an in progress 'dot'
+                    print(".", end='')
+                    sys.stdout.flush()
+                    # wait 1 seconds before retrying
+                    time.sleep(1)
+            except Exception as e:
+                print("autosupport generateASL progress Error: " + str(e), file=sys.stderr)
+
             print("\nThe autosupport generateASL command has completed.")
 
         except Exception as e:
@@ -565,8 +808,9 @@ class SpectraLogicAPI:
                   ") is not a valid LTO drive. This command only works on LTO drives.")
             return
 
-        if not self.CheckCommandProgress("driveList"):
+        if not self.check_command_progress("driveList", True):
             print("Will not issue generatedrivetrace command due to pending commands.")
+            return
 
         try:
             url  = self.baseurl + "/driveList.xml?action=generateDriveTraces&driveTracesDrives=" + driveID
@@ -581,14 +825,17 @@ class SpectraLogicAPI:
             if status == "OK":
                 print("The driveList generateDriveTraces command has been submitted: " + message)
 
-            url2 = self.baseurl + "/driveList.xml?progress"
-            status = ""
-            while (status != "OK"):
-                tree = self.run_command(url2)
-                statusRec = tree.find("status")
-                status = statusRec.text.strip()
-                print(".", end='')
-                sys.stdout.flush()
+            # poll for driveList generateDriveTraces to be done
+            try:
+                while (not self.check_command_progress("driveList", False)):
+                    # put out an in progress 'dot'
+                    print(".", end='')
+                    sys.stdout.flush()
+                    # wait 1 seconds before retrying
+                    time.sleep(1)
+            except Exception as e:
+                print("driveList generateDriveTraces progress Error: " + str(e), file=sys.stderr)
+
             print("\nThe driveList generateDriveTraces command has completed.")
 
         except Exception as e:
@@ -606,18 +853,11 @@ class SpectraLogicAPI:
     def getaslfile(self, filename):
 
         try:
-            # replace the spaces in the file name with %20 using a urllib module
+            # Replace the spaces in the file name with %20 using a urllib module
             url  = self.baseurl + "/autosupport.xml?action=getASL&name=" + urllib.parse.quote(filename)
 
-            # FIXME someday...
-            # The libraries currently use self-signed certs
-            # Do not verify the certificate for now...
-            ssl._create_default_https_context = ssl._create_unverified_context
-            opener    = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.cookiejar))
-            opener.addheaders.append(("Cookie", "sessionID=" + self.sessionid))
-            request   = urllib.request.Request(url)
-            response  = opener.open(request)
-            xmldoc    = response.read()
+            # Call the run command wrapper that returns a string
+            xmldoc = self.run_command_string(url)
 
             # Write the data to a file in the current working directory.
             # The name of the file is the same as the ASL name except:
@@ -627,23 +867,6 @@ class SpectraLogicAPI:
             f = open(outputFilename, 'wb')
             f.write(xmldoc)
             f.close()
-
-            try:
-                tree = xml.etree.ElementTree.fromstring(xmldoc)
-                if tree.tag == "error":
-                    for child in tree:
-                        if (child.text.find("Error: No active session found.") >= 0):
-                            raise(SpectraLogicLoginError("Error: No active session found."))
-
-                    errstr = ""
-                    for child in tree:
-                        errstr = errstr + child.tag + ": " + child.text + "\n"
-                    raise(Exception(errstr))
-            except Exception as exc:
-                # if we get an exception trying to look at the xlm, then that
-                # means we most likely got a good file!
-                if (self.verbose):
-                    print("getaslfile: No error tags in data")
 
             print("Successfully created: '" + outputFilename + "'")
 
@@ -666,7 +889,7 @@ class SpectraLogicAPI:
             print("\nAutoSupport Log (ASL) File Names: <HardwareID Date Time>")
             print(  "--------------------------------------------------------")
             if self.longlist:
-                self.longlisting(tree, 0)
+                self.long_listing(tree, 0)
                 return
 
             for aslNames in tree:
@@ -689,7 +912,7 @@ class SpectraLogicAPI:
     # get the drive load count for the driveID. Upon success, it returns the
     # load count, otherwise, it returns the string "INVALID".
     #
-    def GetDriveLoadCount(self, driveID):
+    def get_drive_load_count(self, driveID):
 
         try:
             url = self.baseurl + "/driveList.xml?action=getDriveLoadCount&driveName=" + driveID
@@ -714,23 +937,193 @@ class SpectraLogicAPI:
         try:
             url  = self.baseurl + "/driveList.xml?action=getDriveTraces&driveTracesGetType=download"
 
-            # FIXME someday...
-            # The libraries currently use self-signed certs
-            # Do not verify the certificate for now...
-            ssl._create_default_https_context = ssl._create_unverified_context
-            opener    = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.cookiejar))
-            opener.addheaders.append(("Cookie", "sessionID=" + self.sessionid))
-            request   = urllib.request.Request(url)
-            response  = opener.open(request)
+            # Call the run command wrapper that returns a string
+            xmldoc = self.run_command_string(url)
 
+            # Write the data to a file in the current working directory.
             f = open('drivetraces.zip', 'wb')
-            f.write(response.read())
+            f.write(xmldoc)
             f.close()
 
             print("Successfully created: 'drivetraces.zip'")
 
         except Exception as e:
             print("getdrivetraces Error: " + str(e), file=sys.stderr)
+            if (self.verbose):
+                traceback.print_exc()
+
+
+    #--------------------------------------------------------------------------
+    #
+    # Retrieves the specified Motion Log file from the library
+    # Outputs a filename in the current working directory that is the Motion
+    # Log file name.
+    #
+    # NOTE: This API is not documented in the June 2017 (version K) of the
+    # Spectra XML reference document.  Got the information from SpectraLogic
+    # support.
+    #
+    def getmotionlogfile(self, filename):
+
+        # check for traces commands in progress and wait until done
+        try:
+            if (not self.check_command_progress("traces", False)):
+                print("There's a traces command in progress." +
+                      "Will wait up to 5 minutes retrying.")
+                count = 0
+                while (not self.check_command_progress("traces", False)):
+                    # put out an in progress 'dot'
+                    print(".", end='')
+                    sys.stdout.flush()
+                    count += 1
+                    # wait 4 seconds before retrying
+                    time.sleep(4)
+                    if (count > ((60 * 5) / 4)):    # five minutes
+                        print("\nGiving up. Retry this command later.")
+                        return
+                print()
+        except Exception as e:
+            print("traces progress Error: " + str(e), file=sys.stderr)
+            if (self.verbose):
+                traceback.print_exc()
+            return
+
+
+        # getFullMotionLogNames
+        try:
+            # Check to see if the file has been gathered (i.e. downloaded from
+            # RCM)
+            print("Checking to see if the file needs to be gathered..." +
+                  "i.e. downloaded from RCM")
+            url  = self.baseurl + "/traces.xml?action=getFullMotionLogNames"
+            tree = self.run_command(url)
+
+            for child in tree:
+                if len(child) == 0:
+                    # None
+                    raise(Exception("Error: No motion log files exist"))
+
+                foundIt = False;
+                if child.tag == "motionLogNames":
+                    for item in child:
+                        if item.tag == "File":
+                            logName = gathered = ""
+                            for fileEntry in item:
+                                if fileEntry.tag == "logName":
+                                    logName = fileEntry.text.rstrip()
+                                elif fileEntry.tag == "gathered":
+                                    gathered = fileEntry.text.rstrip()
+                            if logName == filename:
+                                # found it!
+                                foundIt = True;
+                                break
+                if not foundIt:
+                    print("Error: File not found. File=" + filename)
+                    return
+
+        except Exception as e:
+            print("getFullMotionLogNames Error: " + str(e), file=sys.stderr)
+            if (self.verbose):
+                traceback.print_exc()
+            return
+
+
+        # gatherFullMotionLog
+        try:
+            # If the file hasn't been gathered (i.e. downloaded from the RCM),
+            # then gather it.
+            if gathered == "no":
+                print("Gathering the full motion log for file: " + filename)
+                url  = self.baseurl + "/traces.xml?action=gatherFullMotionLog&name=" + filename
+                tree = self.run_command(url)
+        except Exception as e:
+            print("gatherFullMotionLog Error: " + str(e), file=sys.stderr)
+            if (self.verbose):
+                traceback.print_exc()
+            return
+
+
+        # poll for gatherFullMotionLog to be done
+        try:
+            while (not self.check_command_progress("traces", False)):
+                # put out an in progress 'dot'
+                print(".", end='')
+                sys.stdout.flush()
+                # wait 4 seconds before retrying
+                time.sleep(4)
+            print("\nGather is complete")
+        except Exception as e:
+            print("traces gatherFullMotionLog progress Error: " + str(e), file=sys.stderr)
+            if (self.verbose):
+                traceback.print_exc()
+            return
+
+
+        # getFullMotionLog
+        try:
+            print("Getting the full motion log file.")
+            url  = self.baseurl + "/traces.xml?action=getFullMotionLog&name=" + filename
+
+            # Call the run command wrapper that returns a string
+            xmldoc = self.run_command_string(url)
+
+            # Write the data to a file in the current working directory.
+            # The name of the file is the same as the motion log name
+            f = open(filename, 'wb')
+            f.write(xmldoc)
+            f.close()
+
+            print("Successfully created: '" + filename + "'")
+
+        except Exception as e:
+            print("getmotionlogfile Error: " + str(e), file=sys.stderr)
+            if (self.verbose):
+                traceback.print_exc()
+
+
+    #--------------------------------------------------------------------------
+    #
+    # Returns a list of the Motion Log file names currently stored on the
+    # library.
+    #
+    # NOTE: This API is not documented in the June 2017 (version K) of the
+    # Spectra XML reference document.  Got the information from SpectraLogic
+    # support.
+    #
+    def getmotionlognames(self):
+
+        fmt = '{:42} {:9}'
+
+        try:
+            url  = self.baseurl + "/traces.xml?action=getFullMotionLogNames"
+            tree = self.run_command(url)
+            print("\nMotion Log File Names")
+            print(  "---------------------")
+            if self.longlist:
+                self.long_listing(tree, 0)
+                return
+
+            print(fmt.format("LogFileName", "Gathered?"))
+            print(fmt.format("------------------------------------------",
+                             "---------"))
+
+            for child in tree:
+                if len(child) == 0:
+                    print("None")
+                    return
+                if child.tag == "motionLogNames":
+                    for item in child:
+                        if item.tag == "File":
+                            logName = gathered = ""
+                            for fileEntry in item:
+                                if fileEntry.tag == "logName":
+                                    logName = fileEntry.text.rstrip()
+                                elif fileEntry.tag == "gathered":
+                                    gathered = fileEntry.text.rstrip()
+                            print(fmt.format(logName, gathered))
+
+        except Exception as e:
+            print("getmotionlognames Error: " + str(e), file=sys.stderr)
             if (self.verbose):
                 traceback.print_exc()
 
@@ -750,7 +1143,7 @@ class SpectraLogicAPI:
             print("\nHardware Health Monitoring (HHM) Counters")
             print("-----------------------------------------")
             if self.longlist:
-                self.longlisting(tree, 0)
+                self.long_listing(tree, 0)
                 return
             print(counterFormat. \
                 format("CounterName", "SubType", "Value",
@@ -823,7 +1216,7 @@ class SpectraLogicAPI:
             url       = self.baseurl + "/inventory.xml?action=list&partition=" + partition
             tree      = self.run_command(url)
             if self.longlist:
-                self.longlisting(tree, 0)
+                self.long_listing(tree, 0)
                 return
             print("\nInventory List")
             print("--------------")
@@ -887,7 +1280,7 @@ class SpectraLogicAPI:
             print("\nLibrary Status")
             print("--------------")
             if self.longlist:
-                self.longlisting(tree, 0)
+                self.long_listing(tree, 0)
                 return
 
             # top level stuff
@@ -1740,7 +2133,7 @@ class SpectraLogicAPI:
             url  = self.baseurl + "/libraryStatus.xml"
             tree = self.run_command(url)
             if self.longlist:
-                self.longlisting(tree, 0)
+                self.long_listing(tree, 0)
                 return
             for child in tree:
                 if ( (child.tag == "robot") or
@@ -1868,7 +2261,7 @@ class SpectraLogicAPI:
             print("\nBlueScale Package List")
             print("----------------------")
             if self.longlist:
-                self.longlisting(tree, 0)
+                self.long_listing(tree, 0)
                 return
             for child in tree:
                 if child.tag == "current":
@@ -1904,7 +2297,7 @@ class SpectraLogicAPI:
             print("\nPartition List")
             print(  "--------------")
             if self.longlist:
-                self.longlisting(tree, 0)
+                self.long_listing(tree, 0)
                 return
             for child in tree:
                 if child.tag == "partitionName":
@@ -1933,7 +2326,7 @@ class SpectraLogicAPI:
             print("\nSystem Messages")
             print(  "---------------")
             if self.longlist:
-                self.longlisting(tree, 0)
+                self.long_listing(tree, 0)
                 return
             print(msgFormat. \
                 format("Number", "Date", "Severity", "Message/Remedy"))
@@ -2018,7 +2411,7 @@ class SpectraLogicAPI:
 
             # Handle long list option
             if self.longlist:
-                self.longlisting(tree, 0)
+                self.long_listing(tree, 0)
                 return
 
             # Process the elements
@@ -2115,6 +2508,9 @@ def main():
     controllerslist_parser = cmdsubparsers.add_parser('controllerslist',
         help='Returns controller status, type, firmware, and failover and port information.')
 
+    displaypackagedetails_parser = cmdsubparsers.add_parser('displaypackagedetails',
+        help='Display the current firmware version installed on individual components in the library along with the firmware version included in the currently installed BlueScale package version.')
+
     drivelist_parser = cmdsubparsers.add_parser('drivelist',
         help='Returns detailed information about each of the drives in the library.')
 
@@ -2134,6 +2530,13 @@ def main():
 
     getaslnames_parser = cmdsubparsers.add_parser('getaslnames',
         help='Returns a list of the AutoSupport Log (ASL) file names currently stored on the library.')
+
+    getmotionlogfile_parser = cmdsubparsers.add_parser('getmotionlogfile',
+        help='Retrieves the specified Motion Log file from the library.')
+    getmotionlogfile_parser.add_argument('filename', action='store', help='Motion Log file')
+
+    getmotionlognames_parser = cmdsubparsers.add_parser('getmotionlognames',
+        help='Returns a list of the Motion Log file names currently stored on the library.')
 
     getdrivetraces_parser = cmdsubparsers.add_parser('getdrivetraces',
         help='Returns the last drive trace file generated by the generateDriveTraces action. The command returns a ZIP file in your cwd.')
@@ -2187,6 +2590,8 @@ def main():
         sys.exit(1)
     elif args.command == "controllerslist":
         slapi.controllerslist()
+    elif args.command == "displaypackagedetails":
+        slapi.displaypackagedetails()
     elif args.command == "drivelist":
         slapi.drivelist()
     elif args.command == "etherlibstatus":
@@ -2201,6 +2606,10 @@ def main():
         slapi.getaslnames()
     elif args.command == "getdrivetraces":
         slapi.getdrivetraces()
+    elif args.command == "getmotionlogfile":
+        slapi.getmotionlogfile(args.filename)
+    elif args.command == "getmotionlognames":
+        slapi.getmotionlognames()
     elif args.command == "hhmdata":
         slapi.hhmdata()
     elif args.command == "inventorylist":

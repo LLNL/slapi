@@ -563,11 +563,34 @@ class SpectraLogicAPI:
     #
     def displaypackagedetails(self):
 
-        headerFormat = '{:30} {:23} {:26}'
-        listFormat = '{:25} {:25} {:25} {:13}'
+        headerFormat = '{:35} {:23} {:26}'
+        listFormat = '{:25} {:15} {:15} {:13}'
 
+        # first get the list of packages and find the currently running package
         try:
-            url  = self.baseurl + "/package.xml?action=displayPackageDetails"
+            url  = self.baseurl + "/package.xml?action=list"
+            tree = self.run_command(url)
+            if len(tree) == 0:
+                raise(Exception("Error: No packages exist"))
+            currentPackage = tree.find("current")
+            if len(currentPackage) == 0:
+                raise(Exception("Error: Unable to find currently running package element"))
+            name = currentPackage.find("name")
+            if name is None:
+                raise(Exception("Error: Unable to get the currently running package name"))
+            pgkName = name.text.strip()
+        except Exception as e:
+            print("Problem getting the currently running package name.")
+            print("displayPackageDetails Error: " + str(e), file=sys.stderr)
+            if (self.verbose):
+                traceback.print_exc()
+            return
+
+        # Use the package name to get the details.  Note: XML documentation
+        # dated June 2017 is missing information about needing the package
+        # argument for the displayPackageDetails action.
+        try:
+            url  = self.baseurl + "/package.xml?action=displayPackageDetails&package=" + pgkName
             tree = self.run_command(url)
             print("\nPackage Details")
             print(  "----------------")
@@ -578,37 +601,36 @@ class SpectraLogicAPI:
                 print("None")
                 return
 
+            # top level stuff
+            packageName = tree.find("packageName")
+            allComponentsUpToDate = tree.find("allComponentsUpToDate")
+            allComponentsFullyStaged = tree.find("allComponentsFullyStaged")
+            print()
             print(headerFormat. \
                 format("PackageName", "AllComponentsUpToDate?",
                        "AllComponentsFullyStaged?"))
-            print(listFormat. \
-                format("------------------------------",
+            print(headerFormat. \
+                format("----------------------------------",
                        "-----------------------",
                        "--------------------------"))
-
+            print(headerFormat. \
+                format(packageName.text.strip(),
+                       allComponentsUpToDate.text.strip(),
+                       allComponentsFullyStaged.text.strip()))
             headersPrinted = False
 
             for pkg in tree:
-                if pkg.tag == "packageName":
-                    packageName = pkg.text.rstrip()
-                elif pkg.tag == "allComponentsUpToDate":
-                    allComponentsUpToDate = pkg.text.rstrip()
-                elif pkg.tag == "allComponentsFullyStaged":
-                    allComponentsFullyStaged = pkg.text.rstrip()
-                elif pkg.tag == "component":
+                if pkg.tag == "component":
                     if not headersPrinted:
-                        print(headerFormat. \
-                            format(packageName, allComponentsUpToDate,
-                                allComponentsFullyStaged))
                         print()
                         print(listFormat. \
                             format("ComponentName", "CurrentVersion",
                                 "PackageVersion", "FullyStaged?"))
                         print(listFormat. \
                             format("-------------------------",
-                                "-------------------------",
-                                "--------------------------",
-                                "-------------"))
+                                   "---------------",
+                                   "---------------",
+                                   "-------------"))
                         headersPrinted = True
 
                     name = currentVersion = packageVersion = fullyStaged = ""
@@ -2341,6 +2363,163 @@ class SpectraLogicAPI:
 
     #--------------------------------------------------------------------------
     #
+    # Returns a list of the current Media Lifecycle Management (MLM) settings.
+    #
+    def mlmsettings(self):
+
+        toptopHdrFormat = '{:264} {}'
+        topHdrFormat = '{:264} {:10} {:10} {:10} {:10} {:10} {:10} {:10}'
+        hdrFormat = '{:10} {:19} {:33} {:30} {:35} {:30} {:20} {:30} {:23} {:25} {:10} {:10} {:10} {:10} {:10} {:10} {:10} {:34}'
+
+        try:
+            url  = self.baseurl + "/MLMSettings.xml?action=list"
+            tree = self.run_command(url)
+            print("\nMedia Lifecycle Management (MLM) Settings")
+            print(  "-----------------------------------------")
+
+            if self.longlist:
+                self.long_listing(tree, 0)
+                return
+
+            if (len(tree) == 0):
+                print("None")
+                return
+
+            print(toptopHdrFormat.format("",
+                "----------------------------PostScanTapeBlackout----------------------------"))
+            print(topHdrFormat. \
+                format("","Sunday", "Monday", "Tuesday", "Wednesday",
+                       "Thursday", "Friday", "Saturday"))
+            print(hdrFormat. \
+                format("MLMEnabled", "NonMLMAlertsEnabled",
+                       "LoadCountDiscrepancyAlertsEnabled",
+                       "NonMLMLibraryLoadAlertsEnabled",
+                       "MinCleaningPassesBeforeWarningCount",
+                       "MaxTapeLoadsBeforeWarningCount",
+                       "AutoDiscoveryEnabled",
+                       "AutoDiscoveryIdleWaitInMinutes",
+                       "BroadcastBaseConversion", "BroadcastMegabitPerSecond",
+                       "Start Stop", "Start Stop", "Start Stop", "Start Stop",
+                       "Start Stop", "Start Stop", "Start Stop",
+                       "NoncertifiedMAMBarcodeWriteEnabled"))
+            print(hdrFormat. \
+                format("----------", "-------------------",
+                       "---------------------------------",
+                       "------------------------------",
+                       "-----------------------------------",
+                       "------------------------------",
+                       "--------------------",
+                       "------------------------------",
+                       "-----------------------", "-------------------------",
+                       "----- ----", "----- ----", "----- ----", "----- ----",
+                       "----- ----", "----- ----", "----- ----",
+                       "----------------------------------"))
+
+            if tree.tag == "MLMSettings":
+                MLMEnabled = nonMLMAlertsEnabled = ""
+                loadCountDiscrepancyAlertsEnabled = ""
+                nonMLMLibraryLoadAlertsEnabled = ""
+                minCleaningPassesBeforeWarningCount = ""
+                maxTapeLoadsBeforeWarningCount = autoDiscoveryEnabled = ""
+                autoDiscoveryIdleWaitInMinutes = broadcastBaseConversion = ""
+                broadcastMegabitPerSecond = sunday = monday = tuesday = ""
+                wednesday = thursday = friday = saturday = start = stop = ""
+                noncertifiedMAMBarcodeWriteEnabled = ""
+                for child in tree:
+                    if child.tag == "MLMEnabled":
+                        MLMEnabled = child.text.rstrip()
+                    elif child.tag == "nonMLMAlertsEnabled":
+                        nonMLMAlertsEnabled = child.text.rstrip()
+                    elif child.tag == "loadCountDiscrepancyAlertsEnabled":
+                        loadCountDiscrepancyAlertsEnabled = child.text.rstrip()
+                    elif child.tag == "nonMLMLibraryLoadAlertsEnabled":
+                        nonMLMLibraryLoadAlertsEnabled = child.text.rstrip()
+                    elif child.tag == "minCleaningPassesBeforeWarningCount":
+                        minCleaningPassesBeforeWarningCount = child.text.rstrip()
+                    elif child.tag == "maxTapeLoadsBeforeWarningCount":
+                        maxTapeLoadsBeforeWarningCount = child.text.rstrip()
+                    elif child.tag == "autoDiscoveryEnabled":
+                        autoDiscoveryEnabled = child.text.rstrip()
+                    elif child.tag == "autoDiscoveryIdleWaitInMinutes":
+                        autoDiscoveryIdleWaitInMinutes = child.text.rstrip()
+                    elif child.tag == "broadcastBaseConversion":
+                        broadcastBaseConversion = child.text.rstrip()
+                    elif child.tag == "broadcastMegabitPerSecond":
+                        broadcastMegabitPerSecond = child.text.rstrip()
+                    elif child.tag == "postScanTapeBlackout":
+                        for day in child:
+                            if day.tag == "sunday":
+                                for hours in day:
+                                    if hours.tag == "start":
+                                        start = hours.text.rstrip()
+                                    elif hours.tag == "stop":
+                                        stop = hours.text.rstrip()
+                                sunday = '{:5} {:4}'.format(start, stop)
+                            elif day.tag == "monday":
+                                for hours in day:
+                                    if hours.tag == "start":
+                                        start = hours.text.rstrip()
+                                    elif hours.tag == "stop":
+                                        stop = hours.text.rstrip()
+                                monday = '{:5} {:4}'.format(start, stop)
+                            elif day.tag == "tuesday":
+                                for hours in day:
+                                    if hours.tag == "start":
+                                        start = hours.text.rstrip()
+                                    elif hours.tag == "stop":
+                                        stop = hours.text.rstrip()
+                                tuesday = '{:5} {:4}'.format(start, stop)
+                            elif day.tag == "wednesday":
+                                for hours in day:
+                                    if hours.tag == "start":
+                                        start = hours.text.rstrip()
+                                    elif hours.tag == "stop":
+                                        stop = hours.text.rstrip()
+                                wednesday = '{:5} {:4}'.format(start, stop)
+                            elif day.tag == "thursday":
+                                for hours in day:
+                                    if hours.tag == "start":
+                                        start = hours.text.rstrip()
+                                    elif hours.tag == "stop":
+                                        stop = hours.text.rstrip()
+                                thursday = '{:5} {:4}'.format(start, stop)
+                            elif day.tag == "friday":
+                                for hours in day:
+                                    if hours.tag == "start":
+                                        start = hours.text.rstrip()
+                                    elif hours.tag == "stop":
+                                        stop = hours.text.rstrip()
+                                friday = '{:5} {:4}'.format(start, stop)
+                            elif day.tag == "saturday":
+                                for hours in day:
+                                    if hours.tag == "start":
+                                        start = hours.text.rstrip()
+                                    elif hours.tag == "stop":
+                                        stop = hours.text.rstrip()
+                                saturday = '{:5} {:4}'.format(start, stop)
+                    elif child.tag == "noncertifiedMAMBarcodeWriteEnabled":
+                        noncertifiedMAMBarcodeWriteEnabled = child.text.rstrip()
+                print(hdrFormat. \
+                    format(MLMEnabled, nonMLMAlertsEnabled,
+                           loadCountDiscrepancyAlertsEnabled,
+                           nonMLMLibraryLoadAlertsEnabled,
+                           minCleaningPassesBeforeWarningCount,
+                           maxTapeLoadsBeforeWarningCount,
+                           autoDiscoveryEnabled,
+                           autoDiscoveryIdleWaitInMinutes,
+                           broadcastBaseConversion, broadcastMegabitPerSecond,
+                           sunday, monday, tuesday, wednesday, thursday,
+                           friday, saturday, start, stop,
+                           noncertifiedMAMBarcodeWriteEnabled))
+
+        except Exception as e:
+            print("MLMSettings Error: " + str(e), file=sys.stderr)
+            if (self.verbose):
+                traceback.print_exc()
+
+
+    #--------------------------------------------------------------------------
+    #
     # Retrieves the name of the BlueScale package currently used by the library.
     # The data returned by the command also lists all of the BlueScale package
     # files currently stored on the memory card in the LCM.
@@ -2645,6 +2824,9 @@ def main():
     librarystatus2_parser = cmdsubparsers.add_parser('librarystatus2',
         help='Returns library type, serial number, component status and engineering change level information.')
 
+    mlmsettings_ackagelist_parser = cmdsubparsers.add_parser('mlmsettings',
+        help='Returns a list of the current Media Lifecycle Management (MLM) settings.')
+
     packagelist_parser = cmdsubparsers.add_parser('packagelist',
         help='Retrieves the name of the BlueScale package currently used by the library along with the list of packages currently stored on the memory card in the LCM.')
 
@@ -2710,6 +2892,8 @@ def main():
         slapi.librarystatus()
     elif args.command == "librarystatus2":
         slapi.librarystatus2()
+    elif args.command == "mlmsettings":
+        slapi.mlmsettings()
     elif args.command == "packagelist":
         slapi.packagelist()
     elif args.command == "partitionlist":

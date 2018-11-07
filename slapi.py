@@ -35,7 +35,7 @@ class SpectraLogicAPI:
         self.longlist   = args.longlist
         self.loggedin   = False
         self.sessionid  = ""
-        self.cookiefile = self.slapidirectory() + "/cookies.txt"
+        self.cookiefile = self.slapi_directory() + "/cookies.txt"
         self.cookiejar  = http.cookiejar.LWPCookieJar()
         self.load_cookie()
         self.baseurl    = "https://" + args.server + "/gf"
@@ -45,7 +45,7 @@ class SpectraLogicAPI:
 
     #--------------------------------------------------------------------------
     #
-    def slapidirectory(self):
+    def slapi_directory(self):
 
         home = os.path.expanduser('~')
         if os.path.exists(home) == False:
@@ -2582,6 +2582,114 @@ class SpectraLogicAPI:
 
     #--------------------------------------------------------------------------
     #
+    # Displays the status of all the Robotics Control Modules (RCM)
+    #
+    # Notes from June 2017 XML reference document:
+    # - This action was added with BlueScale12.6.45.5.
+    # - If the library is not able to communicate with the RCM, the command
+    #   returns a syntax error indicating an invalid id.
+    # - A list of all RCMs the library can communicate with can be found in the
+    #   ECInfo section of the response to the libraryStatus.xml command without
+    #   any parameters. RCM component identifiers are preceded with "RCM
+    #   Spectra PC"
+    #
+    def rcmstatuslist(self):
+
+        rcmFormat = '{:10} {:13} {:12} {:12} {:14}'
+
+
+        # First we need to get a list of RCM IDs.  This isn't so obvious.
+        # A list of all RCMs the library can communicate with can be found in
+        # the ECInfo section of the response to the libraryStatus.xml command
+        # without any parameters. RCM component identifiers are preceded with
+        # "RCM Spectra PC"
+        try:
+            url  = self.baseurl + "/libraryStatus.xml"
+            tree = self.run_command(url)
+            if len(tree) == 0:
+                raise(Exception("Error: Problem getting the libraryStatus list"))
+            ecInfo = tree.find("ECInfo")
+            if len(ecInfo) == 0:
+                raise(Exception("Error: Problem getting the libraryStatus ECInfo element"))
+            components = ecInfo.findall("component")
+            if len(components) == 0:
+                raise(Exception("Error: Problem getting the libraryStatus ECInfo component list"))
+            rcmList = []
+            name = ""
+            for component in components:
+                for element in component:
+                    if (element.tag == "ID"):
+                        name = element.text.rstrip()
+                        if "RCM Spectra PC" in name:
+                            rcmList.append(name)
+            if len(rcmList) == 0:
+                raise(Exception("Error: Couldn't find any RCM entries"))
+
+        except Exception as e:
+            print("rcmstatuslist Error getting RCM IDs: " + str(e), file=sys.stderr)
+            if (self.verbose):
+                traceback.print_exc()
+            return
+
+        # Next get the rcmstatus for each RCM
+        try:
+
+            print("\nRCM Status")
+            print(  "----------")
+
+            if not self.longlist:
+                print(rcmFormat. \
+                    format("RCM ID", "overallStatus", "loglibStatus",
+                        "motionStatus", "repeaterStatus"))
+                print(rcmFormat. \
+                    format("----------", "-------------", "------------",
+                           "------------", "--------------"))
+
+            overallStatus = loglibStatus = motionStatus = repeaterStatus = ""
+
+            for rcmIDfull in rcmList:
+
+                # The RCMStatus action just wants the FR[integer]/RCM portion
+                # of the ID. So strip off the prefix.
+                rcmIDsplit = rcmIDfull.split("RCM Spectra PC: ")
+                try:
+                    rcmID = rcmIDsplit[1]
+                except Exception as e:
+                    raise(Exception(
+                        "Error: Problem parsing the RCM ID: " + rcmIDfull))
+
+                url  = self.baseurl + "/libraryStatus.xml?action=RCMStatus&id=" + rcmID
+                tree = self.run_command(url)
+                if self.longlist:
+                    self.long_listing(tree, 0)
+                    continue
+
+                for child in tree:
+                    if child.tag == "RCMStatus":
+                        for rcmstatus in child:
+                            if rcmstatus.tag == "ID":
+                                myid = rcmstatus.text.rstrip()
+                            if rcmstatus.tag == "overallStatus":
+                                overallStatus = rcmstatus.text.rstrip()
+                            if rcmstatus.tag == "loglibStatus":
+                                loglibStatus = rcmstatus.text.rstrip()
+                            if rcmstatus.tag == "motionStatus":
+                                motionStatus = rcmstatus.text.rstrip()
+                            if rcmstatus.tag == "repeaterStatus":
+                                repeaterStatus = rcmstatus.text.rstrip()
+                    print(rcmFormat. \
+                        format(myid, overallStatus, loglibStatus, motionStatus,
+                               repeaterStatus))
+
+
+        except Exception as e:
+            print("rcmstatuslist Error getting RCM Status: " + str(e), file=sys.stderr)
+            if (self.verbose):
+                traceback.print_exc()
+
+
+    #--------------------------------------------------------------------------
+    #
     # Returns the list of system messages that are currently stored on the
     # library. The messages are listed in the order they were posted, beginning
     # with the most recent.
@@ -2833,6 +2941,9 @@ def main():
     partitionlist_parser = cmdsubparsers.add_parser('partitionlist',
         help='List all Spectra Logic Library partitions.')
 
+    rcmstatuslist_parser = cmdsubparsers.add_parser('rcmstatuslist',
+        help='Displays the status of all the Robotics Control Modules (RCM).')
+
     systemmessages_parser = cmdsubparsers.add_parser('systemmessages',
         help='Returns the list of system messages that are currently stored on the library. Most recent first.')
 
@@ -2898,6 +3009,8 @@ def main():
         slapi.packagelist()
     elif args.command == "partitionlist":
         slapi.partitionlist()
+    elif args.command == "rcmstatuslist":
+        slapi.rcmstatuslist()
     elif args.command == "systemmessages":
         slapi.systemmessages()
     elif args.command == "tasklist":

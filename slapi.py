@@ -1244,6 +1244,78 @@ class SpectraLogicAPI:
 
     #--------------------------------------------------------------------------
     #
+    # Returns the status of all TeraPack Access Ports (TAP)s.
+    #
+    def gettapstate(self):
+
+        fmt = '{:10} {:9} {:9} {:15} {:14} {:18} {:14}'
+        tapDevices = ["mainTop", "mainBottom", "leftBulk", "rightBulk"]
+        tapDrawerCount = 14
+
+        print("\nTeraPack Access Ports Status")
+        print(  "----------------------------")
+
+        if not self.longlist:
+            print(fmt. \
+                format("TAPDevice", "Drawer", "DoorOpen", "MagazinePresent",
+                       "MagazineSeated", "MagazineType", "RotaryPosition"))
+            print(fmt. \
+                format("----------", "---------", "---------",
+                       "---------------", "--------------",
+                       "------------------", "--------------"))
+
+        # build a url for each tapdevice/drawer combination
+        for device in tapDevices:                   # for each TAP device type
+            for i in range(1, tapDrawerCount+1):    # for each drawer
+                doorOpen = magazinePresent = magazineSeated = "<unknown>"
+                magazineType = rotaryPosition = "<unknown>"
+                try:
+                    url  = self.baseurl + \
+                           "/mediaExchange.xml?action=getTAPState&TAPDevice=" + \
+                           device + "&drawerNumber=" + str(i)
+                    tree = self.run_command(url)
+                except Exception as e:
+                    # It appears that we get an exception if a particular
+                    # device/drawer combination isn't present in our system.
+                    # This is not an error. Continue to the next item.
+                    print(fmt. \
+                        format(device, str(i), doorOpen, magazinePresent,
+                               magazineSeated, magazineType, rotaryPosition))
+                    continue
+
+                # Perhaps when a device/drawer combination isn't present in our
+                # system, we'll get no items.  Check for that and if so, just
+                # move onto the next one.
+                if len(tree) == 0:
+                    print(fmt. \
+                        format(device, str(i), doorOpen, magazinePresent,
+                               magazineSeated, magazineType, rotaryPosition))
+                    continue
+
+                if self.longlist:
+                    self.long_listing(tree, 0)
+                    return
+
+                if tree.tag == "mediaExchange":
+                    for child in tree:
+                        if child.tag == "doorOpen":
+                            doorOpen = child.text.rstrip()
+                        if child.tag == "magazinePresent":
+                            magazinePresent = child.text.rstrip()
+                        if child.tag == "magazineSeated":
+                            magazineSeated = child.text.rstrip()
+                        if child.tag == "magazineType":
+                            magazineType = child.text.rstrip()
+                        if child.tag == "rotaryPosition":
+                            rotaryPosition = child.text.rstrip()
+                    print(fmt. \
+                        format(device, str(i), doorOpen, magazinePresent,
+                               magazineSeated, magazineType, rotaryPosition))
+
+
+
+    #--------------------------------------------------------------------------
+    #
     # Returns a report showing the current data for all of the Hardware Health
     # Monitoring (HHM) counters for the library.
     #
@@ -2639,8 +2711,8 @@ class SpectraLogicAPI:
 
             if not self.longlist:
                 print(rcmFormat. \
-                    format("RCM ID", "overallStatus", "loglibStatus",
-                        "motionStatus", "repeaterStatus"))
+                    format("RCM ID", "OverallStatus", "LoglibStatus",
+                        "MotionStatus", "RepeaterStatus"))
                 print(rcmFormat. \
                     format("----------", "-------------", "------------",
                            "------------", "--------------"))
@@ -2910,6 +2982,9 @@ def main():
     getaslnames_parser = cmdsubparsers.add_parser('getaslnames',
         help='Returns a list of the AutoSupport Log (ASL) file names currently stored on the library.')
 
+    gettapstate_parser = cmdsubparsers.add_parser('gettapstate',
+        help='Returns the status of all TeraPack Access Ports (TAP)s.')
+
     getmotionlogfile_parser = cmdsubparsers.add_parser('getmotionlogfile',
         help='Retrieves the specified Motion Log file from the library.')
     getmotionlogfile_parser.add_argument('filename', action='store', help='Motion Log file')
@@ -2995,6 +3070,8 @@ def main():
         slapi.getmotionlogfile(args.filename)
     elif args.command == "getmotionlognames":
         slapi.getmotionlognames()
+    elif args.command == "gettapstate":
+        slapi.gettapstate()
     elif args.command == "hhmdata":
         slapi.hhmdata()
     elif args.command == "inventorylist":

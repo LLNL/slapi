@@ -1025,12 +1025,15 @@ class SpectraLogicAPI:
     # Retrieves the specified zip file containing Controller Area Network (CAN)
     # logs from the Library Control Module (LCM).
     #
+    # Outputs a filename in the current working directory that is the CAN Log
+    # file name.
+    #
     # The getCanLog action is only supported for libraries that are using
     # the Spectra LS module as the LCM. Issuing this command to a library that
     # uses a Spectra PC as the LCM returns an empty list.
 
     def getcanlog(self, filename):
-        # getFullMotionLog
+
         try:
             print("Getting the CAN log file '" + filename + "'")
             url  = self.baseurl + "/traces.xml?action=getCanLog&name=" + filename
@@ -1068,8 +1071,8 @@ class SpectraLogicAPI:
         try:
             url  = self.baseurl + "/traces.xml?action=getCanLogNames"
             tree = self.run_command(url)
-            print("\nController Area Network (CAN) File Names")
-            print(  "----------------------------------------")
+            print("\nController Area Network (CAN) Log File Names")
+            print(  "--------------------------------------------")
             if self.longlist:
                 self.long_listing(tree, 0)
                 return
@@ -1138,7 +1141,79 @@ class SpectraLogicAPI:
 
     #--------------------------------------------------------------------------
     #
-    # Retrieves the specified Motion Log file from the library
+    # Retrieves the specified zip file containing kernel logs from the Library
+    # Control Module (LCM).
+    #
+    # Outputs a filename in the current working directory that is the Kernel
+    # Log file name.
+    #
+    # The getKernelLog command is only supported for libraries that are using
+    # the Spectra LS module as the LCM. Issuing this command to a library that
+    # uses a Spectra PC as the LCM returns an empty list.
+
+    def getkernellog(self, filename):
+
+        try:
+            print("Getting the kernel log file '" + filename + "'")
+            url  = self.baseurl + "/traces.xml?action=getKernelLog&name=" + filename
+
+            # Call the run command wrapper that returns a string
+            xmldoc = self.run_command_string(url)
+
+            # Write the data to a file in the current working directory.
+            # The name of the file is the same as the motion log name
+            f = open(filename, 'wb')
+            f.write(xmldoc)
+            f.close()
+
+            print("Successfully created: '" + filename + "'")
+
+        except Exception as e:
+            print("getkernellog Error: " + str(e), file=sys.stderr)
+            if (self.verbose):
+                traceback.print_exc()
+
+
+    #--------------------------------------------------------------------------
+    #
+    # Returns a list of the zip files containing the kernel logs that are
+    # currently stored in the Library Control Module (LCM). The kernel logs
+    # collected for each day are zipped and stored on the hard drive in the
+    # LCM. Each zip filename includes the date it was created.
+    #
+    # The getKernelLogNames command is only supported for libraries that are
+    # using the Spectra LS module as the LCM. Issuing this command to a library
+    # that uses a Spectra PC as the LCM returns an empty list.
+    #
+    def getkernellognames(self):
+
+        try:
+            url  = self.baseurl + "/traces.xml?action=getKernelLogNames"
+            tree = self.run_command(url)
+            print("\nKernel Log File Names")
+            print(  "---------------------")
+            if self.longlist:
+                self.long_listing(tree, 0)
+                return
+
+            for names in tree:
+                if len(names) == 0:
+                    print("None - This command is only supported for libraries"+
+                          " that are using the Spectra LS module as the LCM.")
+                    return
+                for name in names:
+                    if name.tag == "logName":
+                        print(name.text.rstrip())
+
+        except Exception as e:
+            print("getkernellognames Error: " + str(e), file=sys.stderr)
+            if (self.verbose):
+                traceback.print_exc()
+
+
+    #--------------------------------------------------------------------------
+    #
+    # Retrieves the specified Motion Log file from the library.
     # Outputs a filename in the current working directory that is the Motion
     # Log file name.
     #
@@ -3129,6 +3204,16 @@ def main():
     getcanlognames_parser = cmdsubparsers.add_parser('getcanlognames',
         help='Returns a list of the zip files containing the Controller Area Network (CAN) logs that are currently stored in the Library Control Module (LCM). The CAN logs collected for each day are zipped and stored on the hard drive in the LCM. Each zip filename includes the date it was created.')
 
+    getdrivetraces_parser = cmdsubparsers.add_parser('getdrivetraces',
+        help='Returns the last drive trace file generated by the generateDriveTraces action. The command returns a ZIP file in your cwd.')
+
+    getkernellog_parser = cmdsubparsers.add_parser('getkernellog',
+        help='Retrieves the specified zip file containing kernel logs from the Library Control Module (LCM).')
+    getkernellog_parser.add_argument('filename', action='store', help='Kernel Log file')
+
+    getkernellognames_parser = cmdsubparsers.add_parser('getkernellognames',
+        help='Returns a list of the zip files containing the kernel logs that are currently stored in the Library Control Module (LCM). The kernel logs collected for each day are zipped and stored on the hard drive in the LCM. Each zip filename includes the date it was created.')
+
     gettapstate_parser = cmdsubparsers.add_parser('gettapstate',
         help='Returns the status of all TeraPack Access Ports (TAP)s.')
 
@@ -3138,9 +3223,6 @@ def main():
 
     getmotionlognames_parser = cmdsubparsers.add_parser('getmotionlognames',
         help='Returns a list of the Motion Log file names currently stored on the library.')
-
-    getdrivetraces_parser = cmdsubparsers.add_parser('getdrivetraces',
-        help='Returns the last drive trace file generated by the generateDriveTraces action. The command returns a ZIP file in your cwd.')
 
     hhmdata_parser = cmdsubparsers.add_parser('hhmdata',
         help='Returns a report showing the current data for all of the Hardware Health Monitoring (HHM) counters for the library.')
@@ -3221,6 +3303,10 @@ def main():
         slapi.getcanlognames()
     elif args.command == "getdrivetraces":
         slapi.getdrivetraces()
+    elif args.command == "getkernellog":
+        slapi.getkernellog(args.filename)
+    elif args.command == "getkernellognames":
+        slapi.getkernellognames()
     elif args.command == "getmotionlogfile":
         slapi.getmotionlogfile(args.filename)
     elif args.command == "getmotionlognames":

@@ -1396,7 +1396,7 @@ class SpectraLogicAPI:
     #
     def inventorylist(self, partition):
 
-        listFormat = '{:6} {:6} {:10} {:6} {:4}'
+        listFormat = '{:9} {:13} {:6} {:6} {:10} {:6} {:4}'
 
         try:
             url       = self.baseurl + "/inventory.xml?action=list&partition=" + partition
@@ -1408,9 +1408,11 @@ class SpectraLogicAPI:
                 return
             for part in tree:
                 print(listFormat.
-                    format("ID", "Offset", "Barcode", "Queued", "Full"))
+                    format("Partition", "SlotType", "ID", "Offset", "Barcode",
+                           "Queued", "Full"))
                 print(listFormat.
-                    format("------", "------", "----------", "------", "----"))
+                    format("---------", "-------------", "------", "------",
+                           "----------", "------", "----"))
                 for elt in part:
                     if elt.tag != "name":
                         myid = ""
@@ -1418,18 +1420,21 @@ class SpectraLogicAPI:
                         barcode = ""
                         isqueued = ""
                         full = ""
+                        mediaPool = elt.tag.rstrip()
                         for slot in elt:
                             if slot.tag == "id":
-                                myid = slot.text
+                                myid = slot.text.rstrip()
                             elif slot.tag == "offset":
-                                offset = slot.text
+                                offset = slot.text.rstrip()
                             elif slot.tag == "barcode":
                                 barcode = slot.text.strip()
                             elif slot.tag == "isQueued":
-                                isqueued = slot.text
+                                isqueued = slot.text.rstrip()
                             elif slot.tag == "full":
-                                full = slot.text
-                        print(listFormat.format(myid, offset, barcode, isqueued, full))
+                                full = slot.text.rstrip()
+                        print(listFormat. \
+                            format(partition, mediaPool, myid, offset, barcode,
+                                   isqueued, full))
 
         except Exception as e:
             print("InventoryList Error: " + str(e), file=sys.stderr)
@@ -3065,7 +3070,7 @@ def main():
         help='Returns a report showing the current data for all of the Hardware Health Monitoring (HHM) counters for the library.')
 
     inventorylist_parser = cmdsubparsers.add_parser('inventorylist',
-        help='List inventory for the specified partition.')
+        help='Lists all storage slots, entry/exit slots, and drives in the specified partition.')
     inventorylist_parser.add_argument('partition', action='store', help='Spectra Logic Partition')
 
     librarystatus_parser = cmdsubparsers.add_parser('librarystatus',

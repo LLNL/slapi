@@ -1022,6 +1022,75 @@ class SpectraLogicAPI:
 
     #--------------------------------------------------------------------------
     #
+    # Retrieves the specified zip file containing Controller Area Network (CAN)
+    # logs from the Library Control Module (LCM).
+    #
+    # The getCanLog action is only supported for libraries that are using
+    # the Spectra LS module as the LCM. Issuing this command to a library that
+    # uses a Spectra PC as the LCM returns an empty list.
+
+    def getcanlog(self, filename):
+        # getFullMotionLog
+        try:
+            print("Getting the CAN log file '" + filename + "'")
+            url  = self.baseurl + "/traces.xml?action=getCanLog&name=" + filename
+
+            # Call the run command wrapper that returns a string
+            xmldoc = self.run_command_string(url)
+
+            # Write the data to a file in the current working directory.
+            # The name of the file is the same as the motion log name
+            f = open(filename, 'wb')
+            f.write(xmldoc)
+            f.close()
+
+            print("Successfully created: '" + filename + "'")
+
+        except Exception as e:
+            print("getcanlog Error: " + str(e), file=sys.stderr)
+            if (self.verbose):
+                traceback.print_exc()
+
+
+    #--------------------------------------------------------------------------
+    #
+    # Returns a list of the zip files containing the Controller Area Network
+    # (CAN) logs that are currently stored in the Library Control Module (LCM).
+    # The CAN logs collected for each day are zipped and stored on the hard
+    # drive in the LCM. Each zip filename includes the date it was created.
+    #
+    # The getCanLogNames command is only supported for libraries that are using
+    # the Spectra LS module as the LCM. Issuing this command to a library that
+    # uses a Spectra PC as the LCM returns an empty list.
+    #
+    def getcanlognames(self):
+
+        try:
+            url  = self.baseurl + "/traces.xml?action=getCanLogNames"
+            tree = self.run_command(url)
+            print("\nController Area Network (CAN) File Names")
+            print(  "----------------------------------------")
+            if self.longlist:
+                self.long_listing(tree, 0)
+                return
+
+            for names in tree:
+                if len(names) == 0:
+                    print("None - This command is only supported for libraries"+
+                          " that are using the Spectra LS module as the LCM.")
+                    return
+                for name in names:
+                    if name.tag == "logName":
+                        print(name.text.rstrip())
+
+        except Exception as e:
+            print("getcanlognames Error: " + str(e), file=sys.stderr)
+            if (self.verbose):
+                traceback.print_exc()
+
+
+    #--------------------------------------------------------------------------
+    #
     # Using an inputed driveID (format from drivelist ID), this routine will
     # get the drive load count for the driveID. Upon success, it returns the
     # load count, otherwise, it returns the string "INVALID".
@@ -1175,7 +1244,7 @@ class SpectraLogicAPI:
 
         # getFullMotionLog
         try:
-            print("Getting the full motion log file.")
+            print("Getting the full motion log file '" + filename + "'")
             url  = self.baseurl + "/traces.xml?action=getFullMotionLog&name=" + filename
 
             # Call the run command wrapper that returns a string
@@ -3053,6 +3122,13 @@ def main():
     getaslnames_parser = cmdsubparsers.add_parser('getaslnames',
         help='Returns a list of the AutoSupport Log (ASL) file names currently stored on the library.')
 
+    getcanlog_parser = cmdsubparsers.add_parser('getcanlog',
+        help='Retrieves the specified zip file containing Controller Area Network (CAN) logs from the Library Control Module (LCM).')
+    getcanlog_parser.add_argument('filename', action='store', help='Controller Area Network (CAN) Log file')
+
+    getcanlognames_parser = cmdsubparsers.add_parser('getcanlognames',
+        help='Returns a list of the zip files containing the Controller Area Network (CAN) logs that are currently stored in the Library Control Module (LCM). The CAN logs collected for each day are zipped and stored on the hard drive in the LCM. Each zip filename includes the date it was created.')
+
     gettapstate_parser = cmdsubparsers.add_parser('gettapstate',
         help='Returns the status of all TeraPack Access Ports (TAP)s.')
 
@@ -3139,6 +3215,10 @@ def main():
         slapi.getaslfile(args.filename)
     elif args.command == "getaslnames":
         slapi.getaslnames()
+    elif args.command == "getcanlog":
+        slapi.getcanlog(args.filename)
+    elif args.command == "getcanlognames":
+        slapi.getcanlognames()
     elif args.command == "getdrivetraces":
         slapi.getdrivetraces()
     elif args.command == "getmotionlogfile":

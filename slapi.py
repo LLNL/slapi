@@ -1248,7 +1248,7 @@ class SpectraLogicAPI:
     #
     def gettapstate(self):
 
-        fmt = '{:10} {:9} {:9} {:15} {:14} {:18} {:14}'
+        fmt = '{:10} {:6} {:9} {:15} {:14} {:18} {:14}'
         tapDevices = ["mainTop", "mainBottom", "leftBulk", "rightBulk"]
         tapDrawerCount = 14
 
@@ -1260,7 +1260,7 @@ class SpectraLogicAPI:
                 format("TAPDevice", "Drawer", "DoorOpen", "MagazinePresent",
                        "MagazineSeated", "MagazineType", "RotaryPosition"))
             print(fmt. \
-                format("----------", "---------", "---------",
+                format("----------", "------", "---------",
                        "---------------", "--------------",
                        "------------------", "--------------"))
 
@@ -1401,11 +1401,11 @@ class SpectraLogicAPI:
         try:
             url       = self.baseurl + "/inventory.xml?action=list&partition=" + partition
             tree      = self.run_command(url)
+            print("\nInventory List")
+            print("--------------")
             if self.longlist:
                 self.long_listing(tree, 0)
                 return
-            print("\nInventory List")
-            print("--------------")
             for part in tree:
                 print(listFormat.
                     format("ID", "Offset", "Barcode", "Queued", "Full"))
@@ -2654,6 +2654,72 @@ class SpectraLogicAPI:
 
     #--------------------------------------------------------------------------
     #
+    # Retrieve a list of all occupied magazine and cartridge locations in the
+    # specified partition. The list includes the offset value for each occupied
+    # magazine and slot, as well as the barcodes of the magazines and
+    # cartridges, if available.
+    #
+    # Note: Empty locations are not included in the list, but can be identified
+    #       by the gaps in the offset values returned by the command.
+    #
+    def physinventorylist(self, partition):
+
+        topHdrFormat = '{:19} {}'
+        listFormat = '{:8} {:9} {:6} {:7} {:5} {:7} {:6} {:6} {:11}'
+
+        try:
+            url  = self.baseurl + "/physInventory.xml?action=list&partition=" + partition
+            tree = self.run_command(url)
+            print("\nPhysical Inventory List")
+            print(  "-----------------------")
+            if self.longlist:
+                self.long_listing(tree, 0)
+                return
+            for part in tree:
+                print(topHdrFormat.format("",
+                    "----------------------Magazine-----------------------"))
+                print(listFormat.
+                    format("Parition", "MediaPool", "Offset", "Barcode",
+                           "Frame", "TapeBay", "Drawer", "Slot", "SlotBarcode"))
+                print(listFormat.
+                    format("--------", "---------", "------", "-------",
+                           "-----", "-------", "------", "------",
+                           "-----------"))
+
+                mediaPool = ""
+                for pool in part:
+                    if ( (pool.tag == "storage") or
+                         (pool.tag == "entryExit") ):
+                        mediaPool = pool.tag.rstrip()
+                        for magazine in pool:
+                            if (magazine.tag == "magazine"):
+                                offset = magazine.find("offset").text.rstrip()
+                                barcode = magazine.find("barcode").text.rstrip()
+                                frameNumber = magazine.find("frameNumber").text.rstrip()
+                                tapeBayNumber = magazine.find("tapeBayNumber").text.rstrip()
+                                drawerNumber = magazine.find("drawerNumber").text.rstrip()
+                                for element in magazine:
+                                    if (element.tag == "slot"):
+                                        for slot in element:
+                                            if (slot.tag == "number"):
+                                                slotNumber = slot.text.rstrip()
+                                            if (slot.tag == "barcode"):
+                                                slotBarcode = slot.text.rstrip()
+                                        print(listFormat.
+                                            format(partition, mediaPool, offset,
+                                                barcode, frameNumber,
+                                                tapeBayNumber, drawerNumber,
+                                                slotNumber, slotBarcode))
+
+        except Exception as e:
+            print("physinventorylist Error: " + str(e), file=sys.stderr)
+            if (self.verbose):
+                traceback.print_exc()
+
+
+
+    #--------------------------------------------------------------------------
+    #
     # Displays the status of all the Robotics Control Modules (RCM)
     #
     # Notes from June 2017 XML reference document:
@@ -3016,6 +3082,10 @@ def main():
     partitionlist_parser = cmdsubparsers.add_parser('partitionlist',
         help='List all Spectra Logic Library partitions.')
 
+    physinventorylist_parser = cmdsubparsers.add_parser('physinventorylist',
+        help='Retrieve a list of all occupied magazine and cartridge locations in the specified partition. The list includes the offset value for each occupied magazine and slot, as well as the barcodes of the magazines and cartridges, if available.')
+    physinventorylist_parser.add_argument('partition', action='store', help='Spectra Logic Partition')
+
     rcmstatuslist_parser = cmdsubparsers.add_parser('rcmstatuslist',
         help='Displays the status of all the Robotics Control Modules (RCM).')
 
@@ -3086,6 +3156,8 @@ def main():
         slapi.packagelist()
     elif args.command == "partitionlist":
         slapi.partitionlist()
+    elif args.command == "physinventorylist":
+        slapi.physinventorylist(args.partition)
     elif args.command == "rcmstatuslist":
         slapi.rcmstatuslist()
     elif args.command == "systemmessages":

@@ -1388,6 +1388,80 @@ class SpectraLogicAPI:
 
     #--------------------------------------------------------------------------
     #
+    # Retrieves the specified zip file containing Quad Interface Processor (QIP)
+    # logs from the Library Control Module (LCM).
+    #
+    # Outputs a filename in the current working directory that is the QIP Log
+    # file name.
+    #
+    # The getQIPLog action is only supported for libraries that are using
+    # the Spectra LS module as the LCM. Issuing this command to a library that
+    # uses a Spectra PC as the LCM returns an empty list.
+    #
+    # Note: Informed 11/2018 that this is deprecated.
+    def getqiplog(self, filename):
+
+        try:
+            print("Getting the QIP log file '" + filename + "'")
+            url  = self.baseurl + "/traces.xml?action=getQIPLog&name=" + filename
+
+            # Call the run command wrapper that returns a string
+            xmldoc = self.run_command_string(url)
+
+            # Write the data to a file in the current working directory.
+            # The name of the file is the same as the motion log name
+            f = open(filename, 'wb')
+            f.write(xmldoc)
+            f.close()
+
+            print("Successfully created: '" + filename + "'")
+
+        except Exception as e:
+            print("getqiplog Error: " + str(e), file=sys.stderr)
+            if (self.verbose):
+                traceback.print_exc()
+
+
+    #--------------------------------------------------------------------------
+    #
+    # Returns a list of the zip files containing the Quad Interface Processor
+    # (QIP) logs that are currently stored in the Library Control Module (LCM).
+    # The QIP logs collected for each day are zipped and stored on the hard
+    # drive in the LCM. Each zip filename includes the date it was created.
+    #
+    # The getQIPLogNames command is only supported for libraries that are using
+    # the Spectra LS module as the LCM. Issuing this command to a library that
+    # uses a Spectra PC as the LCM returns an empty list.
+    #
+    # Note: Informed 11/2018 that this is deprecated.
+    def getqiplognames(self):
+
+        try:
+            url  = self.baseurl + "/traces.xml?action=getQIPLogNames"
+            tree = self.run_command(url)
+            print("\nQuad Interface Processor (QIP) Log File Names")
+            print(  "---------------------------------------------")
+            if self.longlist:
+                self.long_listing(tree, 0)
+                return
+
+            for names in tree:
+                if len(names) == 0:
+                    print("None - This command is only supported for libraries"+
+                          " that are using the Spectra LS module as the LCM.")
+                    return
+                for name in names:
+                    if name.tag == "logName":
+                        print(name.text.rstrip())
+
+        except Exception as e:
+            print("getqiplognames Error: " + str(e), file=sys.stderr)
+            if (self.verbose):
+                traceback.print_exc()
+
+
+    #--------------------------------------------------------------------------
+    #
     # Returns the status of all TeraPack Access Ports (TAP)s.
     #
     def gettapstate(self):
@@ -3214,15 +3288,22 @@ def main():
     getkernellognames_parser = cmdsubparsers.add_parser('getkernellognames',
         help='Returns a list of the zip files containing the kernel logs that are currently stored in the Library Control Module (LCM). The kernel logs collected for each day are zipped and stored on the hard drive in the LCM. Each zip filename includes the date it was created.')
 
-    gettapstate_parser = cmdsubparsers.add_parser('gettapstate',
-        help='Returns the status of all TeraPack Access Ports (TAP)s.')
-
     getmotionlogfile_parser = cmdsubparsers.add_parser('getmotionlogfile',
         help='Retrieves the specified Motion Log file from the library.')
     getmotionlogfile_parser.add_argument('filename', action='store', help='Motion Log file')
 
     getmotionlognames_parser = cmdsubparsers.add_parser('getmotionlognames',
         help='Returns a list of the Motion Log file names currently stored on the library.')
+
+    getqiplog_parser = cmdsubparsers.add_parser('getqiplog',
+        help='Retrieves the specified zip file containing Quad Interface Processor (QIP) logs from the Library Control Module (LCM).')
+    getqiplog_parser.add_argument('filename', action='store', help='Controller Area Network (CAN) Log file')
+
+    getqiplognames_parser = cmdsubparsers.add_parser('getqiplognames',
+        help='Returns a list of the zip files containing the Quad Interface Processor (QIP) logs that are currently stored in the Library Control Module (LCM). The QIP logs collected for each day are zipped and stored on the hard drive in the LCM. Each zip filename includes the date it was created.')
+
+    gettapstate_parser = cmdsubparsers.add_parser('gettapstate',
+        help='Returns the status of all TeraPack Access Ports (TAP)s.')
 
     hhmdata_parser = cmdsubparsers.add_parser('hhmdata',
         help='Returns a report showing the current data for all of the Hardware Health Monitoring (HHM) counters for the library.')
@@ -3311,6 +3392,10 @@ def main():
         slapi.getmotionlogfile(args.filename)
     elif args.command == "getmotionlognames":
         slapi.getmotionlognames()
+    elif args.command == "getqiplog":
+        slapi.getqiplog(args.filename)
+    elif args.command == "getqiplognames":
+        slapi.getqiplognames()
     elif args.command == "gettapstate":
         slapi.gettapstate()
     elif args.command == "hhmdata":

@@ -422,8 +422,9 @@ class SpectraLogicAPI:
             status = statusRec.text.strip()
             if (status == "OK"):
                 if verbose:
-                    print("The '", command,
-                          "' command has no pending commands. Status=", status)
+                    print("The '" + command +
+                          "' command has no pending commands. Status=" +
+                          status.strip())
                 return(True)
             elif (status == "FAILED"):
                 errorText = "Error: The '" + command + "' command FAILED"
@@ -431,7 +432,7 @@ class SpectraLogicAPI:
             else:
                 if verbose:
                     print("New commands may not be submitted. ",
-                          "The '", command,
+                          "The '" + command +
                           "' command has a status of: ", status)
                 return(False)
 
@@ -804,6 +805,51 @@ class SpectraLogicAPI:
 
         except Exception as e:
             print("DriveList Error: " + str(e), file=sys.stderr)
+            if (self.verbose):
+                traceback.print_exc()
+
+
+    #--------------------------------------------------------------------------
+    #
+    # Attempts to reestablish the Ethernet connection and update the stored
+    # status information for each EtherLib connection.
+    #
+    def etherlibrefresh(self):
+
+        if not self.check_command_progress("etherLibStatus", True):
+            raise(Exception("Will not issue etherLibStatus refresh command due \
+            to pending commands."))
+
+        try:
+            url  = self.baseurl + "/etherLibStatus.xml?action=refresh"
+            tree = self.run_command(url)
+
+            # get the immediate response
+            for child in tree:
+                if child.tag == "status":
+                    status = child.text.rstrip()
+                elif child.tag == "message":
+                    message = child.text.rstrip()
+            if status == "OK":
+                print("The etherLibStatus refresh command has been submitted: "
+                      + message)
+
+            # poll for etherLibStatus refresh to be done
+            try:
+                while (not self.check_command_progress("etherLibStatus", False)):
+                    # put out an in progress 'dot'
+                    print(".", end='')
+                    sys.stdout.flush()
+                    # wait 1 seconds before retrying
+                    time.sleep(1)
+            except Exception as e:
+                print("etherLibStatus refresh progress Error: " + str(e),
+                      file=sys.stderr)
+
+            print("\nThe etherLibStatus refresh command has completed.")
+
+        except Exception as e:
+            print("etherlibrefresh Error: " + str(e), file=sys.stderr)
             if (self.verbose):
                 traceback.print_exc()
 
@@ -3359,6 +3405,10 @@ def main():
         help='Returns detailed information about each of the drives in the    \
               library.')
 
+    etherlibrefresh_parser = cmdsubparsers.add_parser('etherlibrefresh',
+        help='Attempts to reestablish the Ethernet connection and update the  \
+              stored status information for each EtherLib connection.')
+
     etherlibstatus_parser = cmdsubparsers.add_parser('etherlibstatus',
         help='Retrieve status of the library EtherLib connections.')
 
@@ -3527,6 +3577,8 @@ def main():
         slapi.displaypackagedetails()
     elif args.command == "drivelist":
         slapi.drivelist()
+    elif args.command == "etherlibrefresh":
+        slapi.etherlibrefresh()
     elif args.command == "etherlibstatus":
         slapi.etherlibstatus()
     elif args.command == "generateasl":

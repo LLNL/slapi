@@ -160,6 +160,8 @@ class SpectraLogicAPI:
         for subelem in element:
             self.long_listing(subelem, (level+1))
 
+        sys.stdout.flush()
+
 
     #--------------------------------------------------------------------------
     #
@@ -425,6 +427,7 @@ class SpectraLogicAPI:
                     print("The '" + command +
                           "' command has no pending commands. Status=" +
                           status.strip())
+                    sys.stdout.flush()
                 return(True)
             elif (status == "FAILED"):
                 errorText = "Error: The '" + command + "' command FAILED"
@@ -434,13 +437,14 @@ class SpectraLogicAPI:
                     print("New commands may not be submitted. ",
                           "The '" + command +
                           "' command has a status of: ", status)
+                    sys.stdout.flush()
                 return(False)
 
         except Exception as e:
             if (self.verbose):
                 print("check_command_progress Error: " + str(e), file=sys.stderr)
                 traceback.print_exc()
-            raise(e)
+            raise
 
 
     #--------------------------------------------------------------------------
@@ -482,7 +486,7 @@ class SpectraLogicAPI:
             if (self.verbose):
                 print("check_for_error Error: " + str(e), file=sys.stderr)
                 traceback.print_exc()
-            raise(Exception(e))
+            raise
 
         return(False)
 
@@ -514,6 +518,7 @@ class SpectraLogicAPI:
                        "----------------------", "--------------------",
                        "--------------------", "--------", "--------------",
                        "------", "-------------------"))
+            sys.stdout.flush()
             for controllers in tree:
                 myid = status = firmware = ctype = failoverFrom = ""
                 failoverTo = portName = useSoftAddress = loopID = ""
@@ -547,11 +552,10 @@ class SpectraLogicAPI:
                            ctype, failoverFrom,
                            failoverTo, portName, useSoftAddress,
                            loopID, fibreConnectionMode))
+                sys.stdout.flush()
 
         except Exception as e:
-            print("ControllersList Error: " + str(e), file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
+            raise
 
 
     #--------------------------------------------------------------------------
@@ -582,10 +586,7 @@ class SpectraLogicAPI:
             pgkName = name.text.strip()
         except Exception as e:
             print("Problem getting the currently running package name.")
-            print("displayPackageDetails Error: " + str(e), file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
-            return
+            raise
 
         # Use the package name to get the details.  Note: XML documentation
         # dated June 2017 is missing information about needing the package
@@ -618,6 +619,7 @@ class SpectraLogicAPI:
                 format(packageName.text.strip(),
                        allComponentsUpToDate.text.strip(),
                        allComponentsFullyStaged.text.strip()))
+            sys.stdout.flush()
             headersPrinted = False
 
             for pkg in tree:
@@ -632,6 +634,7 @@ class SpectraLogicAPI:
                                    "---------------",
                                    "---------------",
                                    "-------------"))
+                        sys.stdout.flush()
                         headersPrinted = True
 
                     name = currentVersion = packageVersion = fullyStaged = ""
@@ -647,11 +650,10 @@ class SpectraLogicAPI:
                     print(listFormat. \
                         format(name, currentVersion, packageVersion,
                                fullyStaged))
+                    sys.stdout.flush()
 
         except Exception as e:
-            print("displayPackageDetails Error: " + str(e), file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
+            raise
 
 
     #--------------------------------------------------------------------------
@@ -678,6 +680,7 @@ class SpectraLogicAPI:
                             print("    ID: " + myid);
                             loadCount = self.get_drive_load_count(myid)
                             print("    loadCount: " + loadCount);
+                sys.stdout.flush()
                 return
             print(driveFormat. \
                 format("ID", "DriveStatus", "Parition",
@@ -695,6 +698,7 @@ class SpectraLogicAPI:
                        "-------", "------", "---------",
                        "----------", "--------", "--------------",
                        "---------------"))
+            sys.stdout.flush()
             for drive in tree:
                 myid = status = partition = paritionDriveNum = ""
                 driveType = serialNum = manuSerialNum = driveFW = ""
@@ -802,11 +806,10 @@ class SpectraLogicAPI:
                            dcmFW, prettyWWN, fibreAddress, loopNum, health, loadCount,
                            sparedWith, spareFor, sparePotential,
                            firmwareStaging) )
+                sys.stdout.flush()
 
         except Exception as e:
-            print("DriveList Error: " + str(e), file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
+            raise
 
 
     #--------------------------------------------------------------------------
@@ -833,6 +836,7 @@ class SpectraLogicAPI:
             if status == "OK":
                 print("The etherLibStatus refresh command has been submitted: "
                       + message)
+                sys.stdout.flush()
 
             # poll for etherLibStatus refresh to be done
             try:
@@ -843,15 +847,14 @@ class SpectraLogicAPI:
                     # wait 1 seconds before retrying
                     time.sleep(1)
             except Exception as e:
-                print("etherLibStatus refresh progress Error: " + str(e),
-                      file=sys.stderr)
+                raise(Exception("etherLibStatus refresh progress Error: " + str(e),
+                                file=sys.stderr))
 
             print("\nThe etherLibStatus refresh command has completed.")
+            sys.stdout.flush()
 
         except Exception as e:
-            print("etherlibrefresh Error: " + str(e), file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
+            raise
 
 
     #--------------------------------------------------------------------------
@@ -875,6 +878,7 @@ class SpectraLogicAPI:
                 format("ID", "Target", "Connected"))
             print(listFormat. \
                 format("-----", "----------", "---------"))
+            sys.stdout.flush()
             for component in tree:
                 myid = target = connected = ""
                 for element in component:
@@ -888,11 +892,10 @@ class SpectraLogicAPI:
                                 connected = connection.text.rstrip()
                 print(listFormat. \
                     format(myid, target, connected))
+                sys.stdout.flush()
 
         except Exception as e:
-            print("EtherLibStatus Error: " + str(e), file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
+            raise
 
 
     #--------------------------------------------------------------------------
@@ -902,8 +905,8 @@ class SpectraLogicAPI:
     def generateasl(self):
 
         if not self.check_command_progress("autosupport", True):
-            print("Will not issue generateasl command due to pending commands.")
-            return
+            raise(Exception(
+                "Will not issue generateasl command due to pending commands."))
 
         try:
             url  = self.baseurl + "/autosupport.xml?action=generateASL"
@@ -917,6 +920,7 @@ class SpectraLogicAPI:
                     message = child.text.rstrip()
             if status == "OK":
                 print("The autosupport generateASL command has been submitted: " + message)
+                sys.stdout.flush()
 
             # poll for autosupport generateASL to be done
             try:
@@ -927,14 +931,14 @@ class SpectraLogicAPI:
                     # wait 1 seconds before retrying
                     time.sleep(1)
             except Exception as e:
-                print("autosupport generateASL progress Error: " + str(e), file=sys.stderr)
+                raise(Exception("autosupport generateASL progress Error: " +  \
+                                str(e), file=sys.stderr))
 
             print("\nThe autosupport generateASL command has completed.")
+            sys.stdout.flush()
 
         except Exception as e:
-            print("generateasl Error: " + str(e), file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
+            raise
 
 
     #--------------------------------------------------------------------------
@@ -960,17 +964,16 @@ class SpectraLogicAPI:
                         foundIt = True
 
         if not foundIt:
-            print("Error: The input drive (" + driveID + ") is not a valid drive.")
-            return
+            raise(Exception("Error: The input drive (" + driveID +
+                            ") is not a valid drive."))
 
         if driveID.find("LTO") == -1:
-            print("Error: The input drive (" + driveID +
-                  ") is not a valid LTO drive. This command only works on LTO drives.")
-            return
+            raise(Exception("Error: The input drive (" + driveID +
+                  ") is not a valid LTO drive. This command only works on LTO drives."))
 
         if not self.check_command_progress("driveList", True):
-            print("Will not issue generatedrivetrace command due to pending commands.")
-            return
+            raise(Exception(
+                "Will not issue generatedrivetrace command due to pending commands."))
 
         try:
             url  = self.baseurl + "/driveList.xml?action=generateDriveTraces&driveTracesDrives=" + driveID
@@ -984,6 +987,7 @@ class SpectraLogicAPI:
                     message = child.text.rstrip()
             if status == "OK":
                 print("The driveList generateDriveTraces command has been submitted: " + message)
+                sys.stdout.flush()
 
             # poll for driveList generateDriveTraces to be done
             try:
@@ -994,14 +998,15 @@ class SpectraLogicAPI:
                     # wait 1 seconds before retrying
                     time.sleep(1)
             except Exception as e:
-                print("driveList generateDriveTraces progress Error: " + str(e), file=sys.stderr)
+                raise(Exception(
+                    "driveList generateDriveTraces progress Error: " + str(e),
+                    file=sys.stderr))
 
             print("\nThe driveList generateDriveTraces command has completed.")
+            sys.stdout.flush()
 
         except Exception as e:
-            print("generatedrivetrace Error: " + str(e), file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
+            raise
 
 
     #--------------------------------------------------------------------------
@@ -1029,11 +1034,10 @@ class SpectraLogicAPI:
             f.close()
 
             print("Successfully created: '" + outputFilename + "'")
+            sys.stdout.flush()
 
         except Exception as e:
-            print("getaslfile Error: " + str(e), file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
+            raise
 
 
     #--------------------------------------------------------------------------
@@ -1055,15 +1059,15 @@ class SpectraLogicAPI:
             for aslNames in tree:
                 if len(aslNames) == 0:
                     print("None - Perhaps you need to generate some?")
+                    sys.stdout.flush()
                     return
                 for aslName in aslNames:
                     if aslName.tag == "ASLName":
                         print(aslName.text.rstrip())
+                        sys.stdout.flush()
 
         except Exception as e:
-            print("getaslnames Error: " + str(e), file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
+            raise
 
 
     #--------------------------------------------------------------------------
@@ -1082,6 +1086,7 @@ class SpectraLogicAPI:
 
         try:
             print("Getting the CAN log file '" + filename + "'")
+            sys.stdout.flush()
             url  = self.baseurl + "/traces.xml?action=getCanLog&name=" + filename
 
             # Call the run command wrapper that returns a string
@@ -1094,11 +1099,10 @@ class SpectraLogicAPI:
             f.close()
 
             print("Successfully created: '" + filename + "'")
+            sys.stdout.flush()
 
         except Exception as e:
-            print("getcanlog Error: " + str(e), file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
+            raise
 
 
     #--------------------------------------------------------------------------
@@ -1127,15 +1131,15 @@ class SpectraLogicAPI:
                 if len(names) == 0:
                     print("None - This command is only supported for libraries"+
                           " that are using the Spectra LS module as the LCM.")
+                    sys.stdout.flush()
                     return
                 for name in names:
                     if name.tag == "logName":
                         print(name.text.rstrip())
+                        sys.stdout.flush()
 
         except Exception as e:
-            print("getcanlognames Error: " + str(e), file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
+            raise
 
 
     #--------------------------------------------------------------------------
@@ -1178,11 +1182,10 @@ class SpectraLogicAPI:
             f.close()
 
             print("Successfully created: 'drivetraces.zip'")
+            sys.stdout.flush()
 
         except Exception as e:
-            print("getdrivetraces Error: " + str(e), file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
+            raise
 
 
     #--------------------------------------------------------------------------
@@ -1201,6 +1204,7 @@ class SpectraLogicAPI:
 
         try:
             print("Getting the kernel log file '" + filename + "'")
+            sys.stdout.flush()
             url  = self.baseurl + "/traces.xml?action=getKernelLog&name=" + filename
 
             # Call the run command wrapper that returns a string
@@ -1213,11 +1217,10 @@ class SpectraLogicAPI:
             f.close()
 
             print("Successfully created: '" + filename + "'")
+            sys.stdout.flush()
 
         except Exception as e:
-            print("getkernellog Error: " + str(e), file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
+            raise
 
 
     #--------------------------------------------------------------------------
@@ -1246,15 +1249,15 @@ class SpectraLogicAPI:
                 if len(names) == 0:
                     print("None - This command is only supported for libraries"+
                           " that are using the Spectra LS module as the LCM.")
+                    sys.stdout.flush()
                     return
                 for name in names:
                     if name.tag == "logName":
                         print(name.text.rstrip())
+                        sys.stdout.flush()
 
         except Exception as e:
-            print("getkernellognames Error: " + str(e), file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
+            raise
 
 
     #--------------------------------------------------------------------------
@@ -1269,11 +1272,12 @@ class SpectraLogicAPI:
     #
     def getmotionlogfile(self, filename):
 
-        # check for traces commands in progress and wait until done
+        # check for traces command in progress and wait until done
         try:
             if (not self.check_command_progress("traces", False)):
                 print("There's a traces command in progress." +
                       "Will wait up to 5 minutes retrying.")
+                sys.stdout.flush()
                 count = 0
                 while (not self.check_command_progress("traces", False)):
                     # put out an in progress 'dot'
@@ -1284,13 +1288,12 @@ class SpectraLogicAPI:
                     time.sleep(4)
                     if (count > ((60 * 5) / 4)):    # five minutes
                         print("\nGiving up. Retry this command later.")
-                        return
+                        sys.stdout.flush()
+                        sys.exit(1)
                 print()
         except Exception as e:
             print("traces progress Error: " + str(e), file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
-            return
+            raise
 
 
         # getFullMotionLogNames
@@ -1299,6 +1302,7 @@ class SpectraLogicAPI:
             # RCM)
             print("Checking to see if the file needs to be gathered..." +
                   "i.e. downloaded from RCM")
+            sys.stdout.flush()
             url  = self.baseurl + "/traces.xml?action=getFullMotionLogNames"
             tree = self.run_command(url)
 
@@ -1322,14 +1326,12 @@ class SpectraLogicAPI:
                                 foundIt = True;
                                 break
                 if not foundIt:
-                    print("Error: File not found. File=" + filename)
-                    return
+                    raise(Exception("Error: File not found. File=" + filename))
 
         except Exception as e:
             print("getFullMotionLogNames Error: " + str(e), file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
-            return
+            sys.stdout.flush()
+            raise
 
 
         # gatherFullMotionLog
@@ -1338,13 +1340,13 @@ class SpectraLogicAPI:
             # then gather it.
             if gathered == "no":
                 print("Gathering the full motion log for file: " + filename)
+                sys.stdout.flush()
                 url  = self.baseurl + "/traces.xml?action=gatherFullMotionLog&name=" + filename
                 tree = self.run_command(url)
         except Exception as e:
             print("gatherFullMotionLog Error: " + str(e), file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
-            return
+            sys.stdout.flush()
+            raise
 
 
         # poll for gatherFullMotionLog to be done
@@ -1356,16 +1358,17 @@ class SpectraLogicAPI:
                 # wait 4 seconds before retrying
                 time.sleep(4)
             print("\nGather is complete")
+            sys.stdout.flush()
         except Exception as e:
             print("traces gatherFullMotionLog progress Error: " + str(e), file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
-            return
+            sys.stdout.flush()
+            raise
 
 
         # getFullMotionLog
         try:
             print("Getting the full motion log file '" + filename + "'")
+            sys.stdout.flush()
             url  = self.baseurl + "/traces.xml?action=getFullMotionLog&name=" + filename
 
             # Call the run command wrapper that returns a string
@@ -1378,11 +1381,12 @@ class SpectraLogicAPI:
             f.close()
 
             print("Successfully created: '" + filename + "'")
+            sys.stdout.flush()
 
         except Exception as e:
             print("getmotionlogfile Error: " + str(e), file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
+            sys.stdout.flush()
+            raise
 
 
     #--------------------------------------------------------------------------
@@ -1410,10 +1414,12 @@ class SpectraLogicAPI:
             print(fmt.format("LogFileName", "Gathered?"))
             print(fmt.format("------------------------------------------",
                              "---------"))
+            sys.stdout.flush()
 
             for child in tree:
                 if len(child) == 0:
                     print("None")
+                    sys.stdout.flush()
                     return
                 if child.tag == "motionLogNames":
                     for item in child:
@@ -1425,11 +1431,10 @@ class SpectraLogicAPI:
                                 elif fileEntry.tag == "gathered":
                                     gathered = fileEntry.text.rstrip()
                             print(fmt.format(logName, gathered))
+                            sys.stdout.flush()
 
         except Exception as e:
-            print("getmotionlognames Error: " + str(e), file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
+            raise
 
 
     #--------------------------------------------------------------------------
@@ -1449,6 +1454,7 @@ class SpectraLogicAPI:
 
         try:
             print("Getting the QIP log file '" + filename + "'")
+            sys.stdout.flush()
             url  = self.baseurl + "/traces.xml?action=getQIPLog&name=" + filename
 
             # Call the run command wrapper that returns a string
@@ -1461,11 +1467,10 @@ class SpectraLogicAPI:
             f.close()
 
             print("Successfully created: '" + filename + "'")
+            sys.stdout.flush()
 
         except Exception as e:
-            print("getqiplog Error: " + str(e), file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
+            raise
 
 
     #--------------------------------------------------------------------------
@@ -1495,15 +1500,15 @@ class SpectraLogicAPI:
                 if len(names) == 0:
                     print("None - This command is only supported for libraries"+
                           " that are using the Spectra LS module as the LCM.")
+                    sys.stdout.flush()
                     return
                 for name in names:
                     if name.tag == "logName":
                         print(name.text.rstrip())
+                        sys.stdout.flush()
 
         except Exception as e:
-            print("getqiplognames Error: " + str(e), file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
+            raise
 
 
     #--------------------------------------------------------------------------
@@ -1527,6 +1532,7 @@ class SpectraLogicAPI:
                 format("----------", "------", "---------",
                        "---------------", "--------------",
                        "------------------", "--------------"))
+            sys.stdout.flush()
 
         # build a url for each tapdevice/drawer combination
         for device in tapDevices:                   # for each TAP device type
@@ -1545,6 +1551,7 @@ class SpectraLogicAPI:
                     print(fmt. \
                         format(device, str(i), doorOpen, magazinePresent,
                                magazineSeated, magazineType, rotaryPosition))
+                    sys.stdout.flush()
                     continue
 
                 # Perhaps when a device/drawer combination isn't present in our
@@ -1554,6 +1561,7 @@ class SpectraLogicAPI:
                     print(fmt. \
                         format(device, str(i), doorOpen, magazinePresent,
                                magazineSeated, magazineType, rotaryPosition))
+                    sys.stdout.flush()
                     continue
 
                 if self.longlist:
@@ -1575,6 +1583,7 @@ class SpectraLogicAPI:
                     print(fmt. \
                         format(device, str(i), doorOpen, magazinePresent,
                                magazineSeated, magazineType, rotaryPosition))
+                    sys.stdout.flush()
 
 
     #--------------------------------------------------------------------------
@@ -1645,6 +1654,7 @@ class SpectraLogicAPI:
 
         try:
             print("Getting the trace data for '" + choice + "'")
+            sys.stdout.flush()
             url  = self.baseurl + "/traces.xml?traceType=" + choice
 
             # Call the run command wrapper that returns a string
@@ -1671,12 +1681,13 @@ class SpectraLogicAPI:
             f.close()
 
             print("Successfully created: '" + filename + "'")
+            sys.stdout.flush()
 
         except Exception as e:
             print("gettrace (" + choice + ") Error: " + str(e),
                   file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
+            sys.stdout.flush()
+            raise
 
 
     #--------------------------------------------------------------------------
@@ -1704,6 +1715,7 @@ class SpectraLogicAPI:
                 format("-------------------", "---------------", "------",
                        "------", "-------------------------", "--------",
                        "---------", "---------", "----------"))
+            sys.stdout.flush()
             for child in tree:
                 if child.tag == "counter":
                     typeName = ""
@@ -1743,11 +1755,10 @@ class SpectraLogicAPI:
                                        subTypeUnit, reminderName,
                                        reminderSeverity, reminderDefThresh,
                                        reminderCurThresh, reminderPostedDate))
+                            sys.stdout.flush()
 
         except Exception as e:
-            print("hhmdata Error: " + str(e), file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
+            raise
 
 
     #--------------------------------------------------------------------------
@@ -1778,6 +1789,7 @@ class SpectraLogicAPI:
                 print(listFormat.
                     format("---------", "-------------", "------", "------",
                            "----------", "------", "----"))
+                sys.stdout.flush()
                 for elt in part:
                     if elt.tag != "name":
                         myid = ""
@@ -1800,11 +1812,10 @@ class SpectraLogicAPI:
                         print(listFormat. \
                             format(partition, mediaPool, myid, offset, barcode,
                                    isqueued, full))
+                        sys.stdout.flush()
 
         except Exception as e:
-            print("InventoryList Error: " + str(e), file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
+            raise
 
 
     #--------------------------------------------------------------------------
@@ -1828,7 +1839,7 @@ class SpectraLogicAPI:
         fanInFMMFormat = '{:25} {:6} {:13}'
         serviceFormat = '{:25} {:11} {:15} {:14} {:15} {:15} {:9} {:19} {:13} {:14} {:10} {:19} {:15}'
         powerInFMMFormat = '{:25} {:19} {:19}'
-        componentFormat = '{:25} {:2} {:15} {:18} {:25} {:10}'
+        componentFormat = '{:25} {:4} {:15} {:18} {:25} {:10}'
 
         try:
             url  = self.baseurl + "/libraryStatus.xml"
@@ -1852,6 +1863,7 @@ class SpectraLogicAPI:
                 format(libraryType.text.strip(),
                        railPowerOn.text.strip(),
                        serialNumber.text.strip()))
+            sys.stdout.flush()
 
             # initialize some header print variables
             robotHeaderPrinted = False
@@ -1889,6 +1901,7 @@ class SpectraLogicAPI:
                                    "--------------------------------",
                                    "-----------", "-------------",
                                    "--------------", "-----------------"))
+                        sys.stdout.flush()
                         robotHeaderPrinted = True;
                     number = state = transporterType = serviceFrame = ""
                     tapeInPickerCurrent = TeraPackInTransporterCurrent = ""
@@ -1928,6 +1941,7 @@ class SpectraLogicAPI:
                                TeraPackInTransporterUponService,
                                topHAXGear, bottomHAXGear,
                                topHAXSolenoid, bottomHAXSolenoid))
+                    sys.stdout.flush()
 
                 # excessiveMoveFailures list
                 # NOTE: wasn't able to test on NERF Tfinity as it
@@ -1942,6 +1956,7 @@ class SpectraLogicAPI:
                         format("------------", "------------", "------------",
                                "------------", "--------------------",
                                "-------------------"))
+                    sys.stdout.flush()
                     partition = source = destination = numberOfFailures = ""
                     lastSenseInfo = lastFailedMoveTime = ""
 
@@ -1962,6 +1977,7 @@ class SpectraLogicAPI:
                         format(partition, source, destination,
                                numberOfFailures, lastSenseInfo,
                                lastFailedMoveTime))
+                    sys.stdout.flush()
 
                 # controllerEnvironmentInfo list
                 if child.tag == "controllerEnvironmentInfo":
@@ -1970,8 +1986,6 @@ class SpectraLogicAPI:
                         # controllers
                         if ceinfo.tag == "controller":
                             if controllerHeaderPrinted == False:
-                                #print("\nController Environmental Info")
-                                #print(  "-----------------------------")
                                 print()
                                 print(controllerFormat. \
                                     format("ControllerID", "TempInCelsius",
@@ -1981,6 +1995,7 @@ class SpectraLogicAPI:
                                     format("-------------------------",
                                            "-------------", "-----------",
                                            "-----------", "--------------"))
+                                sys.stdout.flush()
                                 controllerHeaderPrinted = True
                             ID = temperatureInCelsius = portALinkUp = ""
                             portBLinkUp = failoverStatus = ""
@@ -1998,12 +2013,11 @@ class SpectraLogicAPI:
                             print(controllerFormat. \
                                 format(ID, temperatureInCelsius, portALinkUp,
                                        portBLinkUp, failoverStatus))
+                            sys.stdout.flush()
 
                         # drive control modules
                         if ceinfo.tag == "driveControlModule":
                             if driveCMHeaderPrinted == False:
-                                #print("\nDrive Control Module Environmental Info")
-                                #print(  "---------------------------------------")
                                 print()
                                 print(driveCMFormat. \
                                     format("DriveControlModuleID", "12VoltVoltage",
@@ -2013,6 +2027,7 @@ class SpectraLogicAPI:
                                     format("-------------------------",
                                            "-------------", "------------",
                                            "----------------", "---------------"))
+                                sys.stdout.flush()
                                 driveCMHeaderPrinted = True
                             ID = twelveVoltVoltage = fiveVoltVoltage = ""
                             fanCurrentInAmps = temperatureInCelsius = ""
@@ -2030,6 +2045,7 @@ class SpectraLogicAPI:
                             print(driveCMFormat. \
                                 format(ID, twelveVoltVoltage, fiveVoltVoltage,
                                        fanCurrentInAmps, temperatureInCelsius))
+                            sys.stdout.flush()
 
                         # power supply FRUs
                         if ceinfo.tag == "powerSupplyFRU":
@@ -2061,6 +2077,7 @@ class SpectraLogicAPI:
                                            "---------", #9
                                            "---------", #9
                                            "---------")) #9
+                                sys.stdout.flush()
                                 psFRUHeaderPrinted = True
 
                             ID = inputPowerOkay = outputPowerOkay = ""
@@ -2121,6 +2138,7 @@ class SpectraLogicAPI:
                                        temperatureInCelsius,
                                        communicatingWithPCM,
                                        fanOne, fanTwo, fanThree))
+                            sys.stdout.flush()
 
                         # power control modules
                         if ceinfo.tag == "powerControlModule":
@@ -2154,6 +2172,7 @@ class SpectraLogicAPI:
                                            "--------------------", #20
                                            "-------------------", #19
                                            "-------------------")) #19
+                                sys.stdout.flush()
                                 powerCMHeaderPrinted = True
 
                             ID = temperatureInCelsius = parallelACPresent = ""
@@ -2213,6 +2232,7 @@ class SpectraLogicAPI:
                                                     onBoardTemperatureInCelsius,
                                                     position,
                                                     faulted))
+                                            sys.stdout.flush()
                                             position = faulted = ""
                                             origPosition = origFaulted = ""
 
@@ -2257,6 +2277,7 @@ class SpectraLogicAPI:
                                            "------------------", #16
                                            "------------", #12
                                            "------------")) #12
+                                sys.stdout.flush()
                                 fanCMHeaderPrinted = True
 
                             ID = frameNumber = temperatureInCelsius = ""
@@ -2315,6 +2336,7 @@ class SpectraLogicAPI:
                                            fanSpeedVoltage, fanSpeedSetting,
                                            fanNumber, fanOn, fanSpeedInRPM,
                                            lightBankNumber, lightBankOn))
+                                sys.stdout.flush()
 
                             fanNumber = fanOn = fanSpeedInRPM = ""
                             lightBankNumber = lightBankOn = ""
@@ -2334,6 +2356,7 @@ class SpectraLogicAPI:
                                            fanSpeedVoltage, fanSpeedSetting,
                                            fanNumber, fanOn, fanSpeedInRPM,
                                            lightBankNumber, lightBankOn))
+                                sys.stdout.flush()
 
                         # frame management modules
                         if ceinfo.tag == "frameManagementModule":
@@ -2386,6 +2409,7 @@ class SpectraLogicAPI:
                                            "-----------------", #17
                                            "---------------------", #21
                                            "---------------------")) #21
+                                sys.stdout.flush()
                                 frameMMHeaderPrinted = True
 
                             ID = twentyFourVoltVoltage = fiveVoltVoltage = ""
@@ -2514,6 +2538,7 @@ class SpectraLogicAPI:
                                        robotPowerEnabled,
                                        internalLightsEnabled,
                                        externalLightsEnabled))
+                            sys.stdout.flush()
 
                         # service bay control modules
                         if ceinfo.tag == "serviceBayControlModule":
@@ -2568,8 +2593,10 @@ class SpectraLogicAPI:
                             format("-------------------------",
                                    "--------",
                                    "---------------"))
+                        sys.stdout.flush()
                         for item in fanPairStringList:
                             print(item)
+                            sys.stdout.flush()
 
                     if len(fanInFMMStringList) > 0:
                         print()
@@ -2581,8 +2608,10 @@ class SpectraLogicAPI:
                             format("-------------------------",
                                    "------",
                                    "-------------"))
+                        sys.stdout.flush()
                         for item in fanInFMMStringList:
                             print(item)
+                            sys.stdout.flush()
 
                     if len(powerInFMMStringList) > 0:
                         print()
@@ -2594,8 +2623,10 @@ class SpectraLogicAPI:
                             format("-------------------------",
                                    "-------------------",
                                    "-------------------"))
+                        sys.stdout.flush()
                         for item in powerInFMMStringList:
                             print(item)
+                            sys.stdout.flush()
 
                     # service bay control modules
                     if len(serviceStringList) > 0:
@@ -2622,8 +2653,10 @@ class SpectraLogicAPI:
                                    "----------", #10
                                    "-------------------", #19
                                    "---------------")) #15
+                        sys.stdout.flush()
                         for item in serviceStringList:
                             print(item)
+                            sys.stdout.flush()
 
                 # ECInfo component list
                 if child.tag == "ECInfo":
@@ -2639,11 +2672,12 @@ class SpectraLogicAPI:
                                            "TopLevelAssemblySerialNum",
                                            "Date"))
                                 print(componentFormat. \
-                                    format("-------------------------", "--",
+                                    format("-------------------------", "----",
                                            "---------------",
                                            "------------------",
                                            "-------------------------",
                                            "----------"))
+                                sys.stdout.flush()
                                 componentHeaderPrinted = True
 
                             ID = EC = serialNumber = topLevelAssemblyEC = ""
@@ -2671,11 +2705,10 @@ class SpectraLogicAPI:
                             print(componentFormat. \
                                 format(ID, EC, serialNumber, topLevelAssemblyEC,
                                        topLevelAssemblySerialNumber, date))
+                            sys.stdout.flush()
 
         except Exception as e:
-            print("LibraryStatus Error: " + str(e), file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
+            raise
 
 
     #--------------------------------------------------------------------------
@@ -2699,6 +2732,7 @@ class SpectraLogicAPI:
                         print(" ", end='')
                         print(item.tag, item.text, sep='=', end='')
                     print() #newline
+                    sys.stdout.flush()
                 elif (child.tag == "controllerEnvironmentInfo"):
                     for cei in child:
                         if ( (cei.tag == "controller") or
@@ -2709,6 +2743,7 @@ class SpectraLogicAPI:
                                 print(" ", end='')
                                 print(item.tag, item.text, sep='=', end='')
                             print() #newline
+                            sys.stdout.flush()
                         elif ( (cei.tag == "powerSupplyFRU") or
                                (cei.tag == "powerControlModule") or
                                (cei.tag == "fanControlModule") or
@@ -2732,9 +2767,11 @@ class SpectraLogicAPI:
                                         print(subitem.tag, subitem.text, sep='=', end='')
                                         count = count + 1
                                     print(")", end='')
+                                    sys.stdout.flush()
                                 else:
                                     print(item.tag, item.text, sep='=', end='')
                             print() #newline
+                            sys.stdout.flush()
                 elif (child.tag == "ECInfo"):
                     for component in child:
                         print(child.tag, component.tag, sep=': ', end='')
@@ -2742,13 +2779,13 @@ class SpectraLogicAPI:
                             print(item.tag, item.text, sep='=', end='')
                             print(" ", end='')
                         print() #newline
+                        sys.stdout.flush()
                 else:
                     print(child.tag, child.text, sep=': ')
+                    sys.stdout.flush()
 
         except Exception as e:
-            print("LibraryStatus2 Error: " + str(e), file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
+            raise
 
 
     #--------------------------------------------------------------------------
@@ -2778,9 +2815,7 @@ class SpectraLogicAPI:
                 self.cookiejar.save(self.cookiefile, ignore_discard=True, ignore_expires=False)
 
         except Exception as e:
-            print("Login Error: " + str(e), file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
+            raise
 
 
     #--------------------------------------------------------------------------
@@ -2825,6 +2860,7 @@ class SpectraLogicAPI:
 
             if (len(tree) == 0):
                 print("None")
+                sys.stdout.flush()
                 return
 
             print(toptopHdrFormat.format("",
@@ -2856,6 +2892,7 @@ class SpectraLogicAPI:
                        "----- ----", "----- ----", "----- ----", "----- ----",
                        "----- ----", "----- ----", "----- ----",
                        "----------------------------------"))
+            sys.stdout.flush()
 
             if tree.tag == "MLMSettings":
                 MLMEnabled = nonMLMAlertsEnabled = ""
@@ -2953,11 +2990,10 @@ class SpectraLogicAPI:
                            sunday, monday, tuesday, wednesday, thursday,
                            friday, saturday, start, stop,
                            noncertifiedMAMBarcodeWriteEnabled))
+                sys.stdout.flush()
 
         except Exception as e:
-            print("MLMSettings Error: " + str(e), file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
+            raise
 
 
     #--------------------------------------------------------------------------
@@ -2976,22 +3012,24 @@ class SpectraLogicAPI:
             if self.longlist:
                 self.long_listing(tree, 0)
                 return
+            sys.stdout.flush()
             for child in tree:
                 if child.tag == "current":
                     for element in child:
                         if element.tag == "name":
                             print("Currently Running", element.text.rstrip(), sep=(': '))
+                            sys.stdout.flush()
                 if child.tag == "list":
                     print("Currently Stored on Library:", end='')
+                    sys.stdout.flush()
                     for element in child:
                         if element.tag == "name":
                             print(" " + element.text.rstrip(), end='')
                     print() #newline
+                    sys.stdout.flush()
 
         except Exception as e:
-            print("packagelist Error: " + str(e), file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
+            raise
 
 
     #--------------------------------------------------------------------------
@@ -3012,14 +3050,14 @@ class SpectraLogicAPI:
             if self.longlist:
                 self.long_listing(tree, 0)
                 return
+            sys.stdout.flush()
             for child in tree:
                 if child.tag == "partitionName":
                     print(child.text.rstrip())
+                    sys.stdout.flush()
 
         except Exception as e:
-            print("PartitionList Error: " + str(e), file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
+            raise
 
 
     #--------------------------------------------------------------------------
@@ -3055,6 +3093,7 @@ class SpectraLogicAPI:
                     format("--------", "---------", "------", "-------",
                            "-----", "-------", "------", "------",
                            "-----------"))
+                sys.stdout.flush()
 
                 mediaPool = ""
                 for pool in part:
@@ -3080,11 +3119,10 @@ class SpectraLogicAPI:
                                                 barcode, frameNumber,
                                                 tapeBayNumber, drawerNumber,
                                                 slotNumber, slotBarcode))
+                                        sys.stdout.flush()
 
         except Exception as e:
-            print("physinventorylist Error: " + str(e), file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
+            raise
 
 
 
@@ -3135,15 +3173,15 @@ class SpectraLogicAPI:
 
         except Exception as e:
             print("rcmstatuslist Error getting RCM IDs: " + str(e), file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
-            return
+            sys.stdout.flush()
+            raise
 
         # Next get the rcmstatus for each RCM
         try:
 
             print("\nRCM Status")
             print(  "----------")
+            sys.stdout.flush()
 
             if not self.longlist:
                 print(rcmFormat. \
@@ -3152,6 +3190,7 @@ class SpectraLogicAPI:
                 print(rcmFormat. \
                     format("----------", "-------------", "------------",
                            "------------", "--------------"))
+                sys.stdout.flush()
 
             overallStatus = loglibStatus = motionStatus = repeaterStatus = ""
 
@@ -3188,13 +3227,72 @@ class SpectraLogicAPI:
                     print(rcmFormat. \
                         format(myid, overallStatus, loglibStatus, motionStatus,
                                repeaterStatus))
+                    sys.stdout.flush()
 
 
         except Exception as e:
-            print("rcmstatuslist Error getting RCM Status: " + str(e), file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
+            raise
 
+
+    #--------------------------------------------------------------------------
+    #
+    # Resets the specified drive by power cycling it.
+    #
+    # Input: driveID as reported by driveList.xml
+    #
+    def resetdrive(self, driveID):
+
+        # validate the drive ID
+        url  = self.baseurl + "/driveList.xml?action=list"
+        tree = self.run_command(url)
+        foundIt = False
+        for element in tree:
+            for drive in element:
+                if drive.tag == "ID":
+                    tempDrive = drive.text.strip()
+                    if (tempDrive == driveID):
+                        foundIt = True
+
+        if not foundIt:
+            raise(Exception("Error: The input drive (" + driveID +
+                            ") is not a valid drive."))
+
+        if not self.check_command_progress("driveList", True):
+            raise(Exception(
+                "Will not issue resetDrive command due to pending commands."))
+
+        try:
+            url  = self.baseurl + "/driveList.xml?action=resetDrive&driveName=" + driveID
+            tree = self.run_command(url)
+
+            # get the immediate response
+            for child in tree:
+                if child.tag == "status":
+                    status = child.text.rstrip()
+                elif child.tag == "message":
+                    message = child.text.rstrip()
+            if status == "OK":
+                print("The driveList resetDrive command has been submitted: " + 
+                      message)
+                sys.stdout.flush()
+
+            # poll for driveList resetDrive to be done
+            try:
+                while (not self.check_command_progress("driveList", False)):
+                    # put out an in progress 'dot'
+                    print(".", end='')
+                    sys.stdout.flush()
+                    # wait 1 seconds before retrying
+                    time.sleep(1)
+            except Exception as e:
+                raise(Exception("driveList resetDrive progress Error: " + str(e),
+                                file=sys.stderr))
+
+            print("\nThe driveList resetDrive command has completed.")
+            sys.stdout.flush()
+
+        except Exception as e:
+            raise
 
     #--------------------------------------------------------------------------
     #
@@ -3220,6 +3318,7 @@ class SpectraLogicAPI:
             print(msgFormat. \
                 format("------", "-------------------", "-----------",
                        "--------------"))
+            sys.stdout.flush()
             for child in tree:
                 if child.tag == "message":
 
@@ -3262,11 +3361,10 @@ class SpectraLogicAPI:
                                  hour + ":" + minute + ":" + second
                     print(msgFormat.format(number, dateString, severity, message))
                     print(msgFormat.format(number, dateString, severity, remedy))
+                    sys.stdout.flush()
 
         except Exception as e:
-            print("systemMessages Error: " + str(e), file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
+            raise
 
 
     #--------------------------------------------------------------------------
@@ -3293,6 +3391,7 @@ class SpectraLogicAPI:
 
             # Bail if we don't have any elements
             if len(tree) == 0:
+                sys.stdout.flush()
                 print("None")
                 return
 
@@ -3320,6 +3419,7 @@ class SpectraLogicAPI:
                         format("-------------------------", "--------------",
                                "--------------"))
                     print(actionFormat.format(name, status, feedbackString))
+                    sys.stdout.flush()
                 elif child.tag == "currentBackgroundTasks":
                     # There can be multiple of these
                     if (taskHeaderPrinted == False):
@@ -3330,6 +3430,7 @@ class SpectraLogicAPI:
                             format("-------------------------",
                                    "-------------------------",
                                    "---------"))
+                        sys.stdout.flush()
                         taskHeaderPrinted = True
                     name = description = extraInformation = ""
                     for task in child:
@@ -3343,16 +3444,17 @@ class SpectraLogicAPI:
                                     extraInformation = thread.text.rstrip()
                     print(taskFormat. \
                         format(name, description, extraInformation))
+                    sys.stdout.flush()
                 elif child.tag == "pageNeedingProgressRequest":
                     print("\nPage Needing Progress Request")
                     print(  "-----------------------------")
+                    sys.stdout.flush()
                     for page in child:
                         print(page.text.rstrip)
+                        sys.stdout.flush()
 
         except Exception as e:
-            print("taskList  Error: " + str(e), file=sys.stderr)
-            if (self.verbose):
-                traceback.print_exc()
+            raise
 
 
 #==============================================================================
@@ -3540,6 +3642,10 @@ def main():
     rcmstatuslist_parser = cmdsubparsers.add_parser('rcmstatuslist',
         help='Displays the status of all the Robotics Control Modules (RCM).')
 
+    resetdrive_parser = cmdsubparsers.add_parser('resetdrive',
+        help='Resets the specified drive by power cycling it.')
+    resetdrive_parser.add_argument('driveID', action='store', help='Drive ID')
+
     systemmessages_parser = cmdsubparsers.add_parser('systemmessages',
         help='Returns the list of system messages that are currently stored   \
               on the library. Most recent first.')
@@ -3568,73 +3674,82 @@ def main():
         sys.exit(1)
 
     slapi = SpectraLogicAPI(args)
-    if args.command is None:
-        cmdparser.print_help()
-        sys.exit(1)
-    elif args.command == "controllerslist":
-        slapi.controllerslist()
-    elif args.command == "displaypackagedetails":
-        slapi.displaypackagedetails()
-    elif args.command == "drivelist":
-        slapi.drivelist()
-    elif args.command == "etherlibrefresh":
-        slapi.etherlibrefresh()
-    elif args.command == "etherlibstatus":
-        slapi.etherlibstatus()
-    elif args.command == "generateasl":
-        slapi.generateasl()
-    elif args.command == "generatedrivetrace":
-        slapi.generatedrivetrace(args.driveID)
-    elif args.command == "getaslfile":
-        slapi.getaslfile(args.filename)
-    elif args.command == "getaslnames":
-        slapi.getaslnames()
-    elif args.command == "getcanlog":
-        slapi.getcanlog(args.filename)
-    elif args.command == "getcanlognames":
-        slapi.getcanlognames()
-    elif args.command == "getdrivetraces":
-        slapi.getdrivetraces()
-    elif args.command == "getkernellog":
-        slapi.getkernellog(args.filename)
-    elif args.command == "getkernellognames":
-        slapi.getkernellognames()
-    elif args.command == "getmotionlogfile":
-        slapi.getmotionlogfile(args.filename)
-    elif args.command == "getmotionlognames":
-        slapi.getmotionlognames()
-    elif args.command == "getqiplog":
-        slapi.getqiplog(args.filename)
-    elif args.command == "getqiplognames":
-        slapi.getqiplognames()
-    elif args.command == "gettapstate":
-        slapi.gettapstate()
-    elif args.command == "gettrace":
-        slapi.gettrace(args.gettrace)
-    elif args.command == "hhmdata":
-        slapi.hhmdata()
-    elif args.command == "inventorylist":
-        slapi.inventorylist(args.partition)
-    elif args.command == "librarystatus":
-        slapi.librarystatus()
-    elif args.command == "librarystatus2":
-        slapi.librarystatus2()
-    elif args.command == "mlmsettings":
-        slapi.mlmsettings()
-    elif args.command == "packagelist":
-        slapi.packagelist()
-    elif args.command == "partitionlist":
-        slapi.partitionlist()
-    elif args.command == "physinventorylist":
-        slapi.physinventorylist(args.partition)
-    elif args.command == "rcmstatuslist":
-        slapi.rcmstatuslist()
-    elif args.command == "systemmessages":
-        slapi.systemmessages()
-    elif args.command == "tasklist":
-        slapi.tasklist()
-    else:
-        cmdparser.print_help()
+
+    try:
+        if args.command is None:
+            cmdparser.print_help()
+            sys.exit(1)
+        elif args.command == "controllerslist":
+            slapi.controllerslist()
+        elif args.command == "displaypackagedetails":
+            slapi.displaypackagedetails()
+        elif args.command == "drivelist":
+            slapi.drivelist()
+        elif args.command == "etherlibrefresh":
+            slapi.etherlibrefresh()
+        elif args.command == "etherlibstatus":
+            slapi.etherlibstatus()
+        elif args.command == "generateasl":
+            slapi.generateasl()
+        elif args.command == "generatedrivetrace":
+            slapi.generatedrivetrace(args.driveID)
+        elif args.command == "getaslfile":
+            slapi.getaslfile(args.filename)
+        elif args.command == "getaslnames":
+            slapi.getaslnames()
+        elif args.command == "getcanlog":
+            slapi.getcanlog(args.filename)
+        elif args.command == "getcanlognames":
+            slapi.getcanlognames()
+        elif args.command == "getdrivetraces":
+            slapi.getdrivetraces()
+        elif args.command == "getkernellog":
+            slapi.getkernellog(args.filename)
+        elif args.command == "getkernellognames":
+            slapi.getkernellognames()
+        elif args.command == "getmotionlogfile":
+            slapi.getmotionlogfile(args.filename)
+        elif args.command == "getmotionlognames":
+            slapi.getmotionlognames()
+        elif args.command == "getqiplog":
+            slapi.getqiplog(args.filename)
+        elif args.command == "getqiplognames":
+            slapi.getqiplognames()
+        elif args.command == "gettapstate":
+            slapi.gettapstate()
+        elif args.command == "gettrace":
+            slapi.gettrace(args.gettrace)
+        elif args.command == "hhmdata":
+            slapi.hhmdata()
+        elif args.command == "inventorylist":
+            slapi.inventorylist(args.partition)
+        elif args.command == "librarystatus":
+            slapi.librarystatus()
+        elif args.command == "librarystatus2":
+            slapi.librarystatus2()
+        elif args.command == "mlmsettings":
+            slapi.mlmsettings()
+        elif args.command == "packagelist":
+            slapi.packagelist()
+        elif args.command == "partitionlist":
+            slapi.partitionlist()
+        elif args.command == "physinventorylist":
+            slapi.physinventorylist(args.partition)
+        elif args.command == "rcmstatuslist":
+            slapi.rcmstatuslist()
+        elif args.command == "resetdrive":
+            slapi.resetdrive(args.driveID)
+        elif args.command == "systemmessages":
+            slapi.systemmessages()
+        elif args.command == "tasklist":
+            slapi.tasklist()
+        else:
+            cmdparser.print_help()
+            sys.exit(1)
+    except Exception as e:
+        print("Command '" + args.command + "': " + str(e), file=sys.stderr)
+        if (args.verbose):
+            traceback.print_exc()
         sys.exit(1)
 
 if __name__ == "__main__":

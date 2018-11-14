@@ -1409,7 +1409,7 @@ class SpectraLogicAPI:
             xmldoc = self.run_command_string(url)
 
             # Write the data to a file in the current working directory.
-            # The name of the file is the same as the motion log name
+            # The name of the file is the same as the QIP log name
             f = open(filename, 'wb')
             f.write(xmldoc)
             f.close()
@@ -1530,6 +1530,107 @@ class SpectraLogicAPI:
                         format(device, str(i), doorOpen, magazinePresent,
                                magazineSeated, magazineType, rotaryPosition))
 
+
+    #--------------------------------------------------------------------------
+    #
+    # Retrieves the ASCII formatted data for the type of trace specified by the
+    # command.
+    #
+    # Outputs a filename in the current working directory that contains the
+    # trace data in ASCII format.
+    #
+    # Output filename format: command_YYYY-MM-DD_<unique number starting at 1>
+    #
+    # Valid Commands:
+    #     Action
+    #     AutoDriveClean
+    #     AutoSupport
+    #     BackgroundClient
+    #     CAN
+    #     Connection
+    #     Encryption
+    #     Error
+    #     EtherLib
+    #     Event
+    #     Geometry
+    #     GPIO
+    #     HHM
+    #     HydraExit
+    #     Initialization
+    #     Inventory
+    #     Kernel
+    #     Lock
+    #     LogicalLibrary
+    #     Message
+    #     MLM
+    #     Motion
+    #     MotionInventory
+    #     MotionOptions
+    #     MotionRestart1
+    #     MotionRestart2
+    #     PackageUpdate
+    #     Pools
+    #     SNMP
+    #     WebServer
+    #
+    # Note: the following commanda have been deprecated:
+    #     DEPRECATED: QIP:[QIP ID]
+    #     DEPRECATED: QIPDump:[QIP ID]
+    #
+    def gettrace(self, traceType):
+
+        choices=['Action', 'AutoDriveClean', 'AutoSupport', 'BackgroundClient',
+                 'CAN', 'Connection', 'Encryption', 'Error', 'EtherLib',
+                 'Event', 'Geometry', 'GPIO', 'HHM', 'HydraExit',
+                 'Initialization', 'Inventory', 'Kernel', 'Lock',
+                 'LogicalLibrary', 'Message', 'MLM', 'Motion',
+                 'MotionInventory', 'MotionOptions', 'MotionRestart1',
+                 'MotionRestart2', 'PackageUpdate', 'Pools', 'SNMP',
+                 'WebServer']
+
+        found = False
+        for choice in choices:
+            if (traceType == choice.lower()):
+                found = True
+                break
+        if (not found):
+            raise(Exception("Error: Invalid trace type '" + traceType + "'"))
+
+
+        try:
+            print("Getting the trace data for '" + choice + "'")
+            url  = self.baseurl + "/traces.xml?traceType=" + choice
+
+            # Call the run command wrapper that returns a string
+            xmldoc = self.run_command_string(url)
+
+            # Write the data to a file in the current working directory.
+            # The name of the file is the same as the trace type with an
+            # underscore and the date appended to it along with a unique
+            # sequential number. (e.g. CAN_2018-11-13_2)
+            from datetime import date
+            filename = choice + "_" + str(date.today())
+            count = 1
+            findUniqueName = True
+            while True:
+                tempFilename = filename + "_" + str(count)
+                if (os.path.exists(tempFilename)):
+                    count = count + 1
+                    continue
+                else:
+                    filename = tempFilename
+                    break
+            f = open(filename, 'wb')
+            f.write(xmldoc)
+            f.close()
+
+            print("Successfully created: '" + filename + "'")
+
+        except Exception as e:
+            print("gettrace (" + choice + ") Error: " + str(e),
+                  file=sys.stderr)
+            if (self.verbose):
+                traceback.print_exc()
 
 
     #--------------------------------------------------------------------------
@@ -3246,13 +3347,17 @@ def main():
 
 
     controllerslist_parser = cmdsubparsers.add_parser('controllerslist',
-        help='Returns controller status, type, firmware, and failover and port information.')
+        help='Returns controller status, type, firmware, and failover and     \
+              port information.')
 
     displaypackagedetails_parser = cmdsubparsers.add_parser('displaypackagedetails',
-        help='Display the current firmware version installed on individual components in the library along with the firmware version included in the currently installed BlueScale package version.')
+        help='Display the current firmware version installed on individual    \
+              components in the library along with the firmware version       \
+              included in the currently installed BlueScale package version.')
 
     drivelist_parser = cmdsubparsers.add_parser('drivelist',
-        help='Returns detailed information about each of the drives in the library.')
+        help='Returns detailed information about each of the drives in the    \
+              library.')
 
     etherlibstatus_parser = cmdsubparsers.add_parser('etherlibstatus',
         help='Retrieve status of the library EtherLib connections.')
@@ -3262,82 +3367,136 @@ def main():
 
     generatedrivetrace_parser = cmdsubparsers.add_parser('generatedrivetrace',
         help='Generates a new drive trace file')
-    generatedrivetrace_parser.add_argument('driveID', action='store', help='LTO Drive ID')
+    generatedrivetrace_parser.add_argument('driveID', action='store',
+        help='LTO Drive ID')
 
     getaslfile_parser = cmdsubparsers.add_parser('getaslfile',
-        help='Retrieves the specified AutoSupport Log (ASL) file from the library.')
-    getaslfile_parser.add_argument('filename', action='store', help='AutoSupport Log file')
+        help='Retrieves the specified AutoSupport Log (ASL) file from the     \
+              library.')
+    getaslfile_parser.add_argument('filename', action='store',
+        help='AutoSupport Log file')
 
     getaslnames_parser = cmdsubparsers.add_parser('getaslnames',
-        help='Returns a list of the AutoSupport Log (ASL) file names currently stored on the library.')
+        help='Returns a list of the AutoSupport Log (ASL) file names          \
+              currently stored on the library.')
 
     getcanlog_parser = cmdsubparsers.add_parser('getcanlog',
-        help='Retrieves the specified zip file containing Controller Area Network (CAN) logs from the Library Control Module (LCM).')
-    getcanlog_parser.add_argument('filename', action='store', help='Controller Area Network (CAN) Log file')
+        help='Retrieves the specified zip file containing Controller Area     \
+              Network (CAN) logs from the Library Control Module (LCM).')
+    getcanlog_parser.add_argument('filename', action='store',
+        help='Controller Area Network (CAN) Log file')
 
     getcanlognames_parser = cmdsubparsers.add_parser('getcanlognames',
-        help='Returns a list of the zip files containing the Controller Area Network (CAN) logs that are currently stored in the Library Control Module (LCM). The CAN logs collected for each day are zipped and stored on the hard drive in the LCM. Each zip filename includes the date it was created.')
+        help='Returns a list of the zip files containing the Controller Area  \
+              Network (CAN) logs that are currently stored in the Library     \
+              Control Module (LCM). The CAN logs collected for each day are   \
+              zipped and stored on the hard drive in the LCM. Each zip        \
+              filename includes the date it was created.')
 
     getdrivetraces_parser = cmdsubparsers.add_parser('getdrivetraces',
-        help='Returns the last drive trace file generated by the generateDriveTraces action. The command returns a ZIP file in your cwd.')
+        help='Returns the last drive trace file generated by the              \
+              generateDriveTraces action. The command returns a ZIP file in   \
+              your cwd.')
 
     getkernellog_parser = cmdsubparsers.add_parser('getkernellog',
-        help='Retrieves the specified zip file containing kernel logs from the Library Control Module (LCM).')
-    getkernellog_parser.add_argument('filename', action='store', help='Kernel Log file')
+        help='Retrieves the specified zip file containing kernel logs from    \
+              the Library Control Module (LCM).')
+    getkernellog_parser.add_argument('filename', action='store',
+        help='Kernel Log file')
 
     getkernellognames_parser = cmdsubparsers.add_parser('getkernellognames',
-        help='Returns a list of the zip files containing the kernel logs that are currently stored in the Library Control Module (LCM). The kernel logs collected for each day are zipped and stored on the hard drive in the LCM. Each zip filename includes the date it was created.')
+        help='Returns a list of the zip files containing the kernel logs that \
+              are currently stored in the Library Control Module (LCM). The   \
+              kernel logs collected for each day are zipped and stored on the \
+              hard drive in the LCM. Each zip filename includes the date it   \
+              was created.')
 
     getmotionlogfile_parser = cmdsubparsers.add_parser('getmotionlogfile',
         help='Retrieves the specified Motion Log file from the library.')
-    getmotionlogfile_parser.add_argument('filename', action='store', help='Motion Log file')
+    getmotionlogfile_parser.add_argument('filename', action='store',
+        help='Motion Log file')
 
     getmotionlognames_parser = cmdsubparsers.add_parser('getmotionlognames',
         help='Returns a list of the Motion Log file names currently stored on the library.')
 
     getqiplog_parser = cmdsubparsers.add_parser('getqiplog',
-        help='Retrieves the specified zip file containing Quad Interface Processor (QIP) logs from the Library Control Module (LCM).')
-    getqiplog_parser.add_argument('filename', action='store', help='Controller Area Network (CAN) Log file')
+        help='Retrieves the specified zip file containing Quad Interface      \
+              Processor (QIP) logs from the Library Control Module (LCM).')
+    getqiplog_parser.add_argument('filename', action='store',
+        help='Controller Area Network (CAN) Log file')
 
     getqiplognames_parser = cmdsubparsers.add_parser('getqiplognames',
-        help='Returns a list of the zip files containing the Quad Interface Processor (QIP) logs that are currently stored in the Library Control Module (LCM). The QIP logs collected for each day are zipped and stored on the hard drive in the LCM. Each zip filename includes the date it was created.')
+        help='Returns a list of the zip files containing the Quad Interface   \
+              Processor (QIP) logs that are currently stored in the Library   \
+              Control Module (LCM). The QIP logs collected for each day are   \
+              zipped and stored on the hard drive in the LCM. Each zip        \
+              filename includes the date it was created.')
 
     gettapstate_parser = cmdsubparsers.add_parser('gettapstate',
         help='Returns the status of all TeraPack Access Ports (TAP)s.')
 
+    gettrace_parser = cmdsubparsers.add_parser('gettrace',
+        help='Returns the ASCII formatted data for the type of trace          \
+              specified by the command.')
+    gettrace_parser.add_argument('gettrace',
+        action='store',
+        type=str.lower,
+        choices=['action', 'autodriveclean', 'autosupport', 'backgroundclient',
+                 'can', 'connection', 'encryption', 'error', 'etherlib',
+                 'event', 'geometry', 'gpio', 'hhm', 'hydraexit',
+                 'initialization', 'inventory', 'kernel', 'lock',
+                 'logicallibrary', 'message', 'mlm', 'motion',
+                 'motioninventory', 'motionoptions', 'motionrestart1',
+                 'motionrestart2', 'packageupdate', 'pools', 'snmp',
+                 'webserver'])
+
     hhmdata_parser = cmdsubparsers.add_parser('hhmdata',
-        help='Returns a report showing the current data for all of the Hardware Health Monitoring (HHM) counters for the library.')
+        help='Returns a report showing the current data for all of the        \
+              Hardware Health Monitoring (HHM) counters for the library.')
 
     inventorylist_parser = cmdsubparsers.add_parser('inventorylist',
-        help='Lists all storage slots, entry/exit slots, and drives in the specified partition.')
-    inventorylist_parser.add_argument('partition', action='store', help='Spectra Logic Partition')
+        help='Lists all storage slots, entry/exit slots, and drives in the    \
+              specified partition.')
+    inventorylist_parser.add_argument('partition', action='store',
+        help='Spectra Logic Partition')
 
     librarystatus_parser = cmdsubparsers.add_parser('librarystatus',
-        help='Returns library type, serial number, component status and engineering change level information. With Headers')
+        help='Returns library type, serial number, component status and       \
+              engineering change level information. With Headers')
     librarystatus2_parser = cmdsubparsers.add_parser('librarystatus2',
-        help='Returns library type, serial number, component status and engineering change level information.')
+        help='Returns library type, serial number, component status and       \
+              engineering change level information.')
 
     mlmsettings_ackagelist_parser = cmdsubparsers.add_parser('mlmsettings',
-        help='Returns a list of the current Media Lifecycle Management (MLM) settings.')
+        help='Returns a list of the current Media Lifecycle Management (MLM)  \
+              settings.')
 
     packagelist_parser = cmdsubparsers.add_parser('packagelist',
-        help='Retrieves the name of the BlueScale package currently used by the library along with the list of packages currently stored on the memory card in the LCM.')
+        help='Retrieves the name of the BlueScale package currently used by   \
+              the library along with the list of packages currently stored on \
+              the memory card in the LCM.')
 
     partitionlist_parser = cmdsubparsers.add_parser('partitionlist',
         help='List all Spectra Logic Library partitions.')
 
     physinventorylist_parser = cmdsubparsers.add_parser('physinventorylist',
-        help='Retrieve a list of all occupied magazine and cartridge locations in the specified partition. The list includes the offset value for each occupied magazine and slot, as well as the barcodes of the magazines and cartridges, if available.')
-    physinventorylist_parser.add_argument('partition', action='store', help='Spectra Logic Partition')
+        help='Retrieve a list of all occupied magazine and cartridge          \
+              locations in the specified partition. The list includes the     \
+              offset value for each occupied magazine and slot, as well as    \
+              the barcodes of the magazines and cartridges, if available.')
+    physinventorylist_parser.add_argument('partition', action='store',
+        help='Spectra Logic Partition')
 
     rcmstatuslist_parser = cmdsubparsers.add_parser('rcmstatuslist',
         help='Displays the status of all the Robotics Control Modules (RCM).')
 
     systemmessages_parser = cmdsubparsers.add_parser('systemmessages',
-        help='Returns the list of system messages that are currently stored on the library. Most recent first.')
+        help='Returns the list of system messages that are currently stored   \
+              on the library. Most recent first.')
 
     tasklist_parser = cmdsubparsers.add_parser('tasklist',
-        help='Returns the list of the extended action and background operations currently in process on the library.')
+        help='Returns the list of the extended action and background          \
+              operations currently in process on the library.')
 
 
     args = cmdparser.parse_args()
@@ -3398,6 +3557,8 @@ def main():
         slapi.getqiplognames()
     elif args.command == "gettapstate":
         slapi.gettapstate()
+    elif args.command == "gettrace":
+        slapi.gettrace(args.gettrace)
     elif args.command == "hhmdata":
         slapi.hhmdata()
     elif args.command == "inventorylist":

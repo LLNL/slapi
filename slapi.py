@@ -1597,38 +1597,13 @@ class SpectraLogicAPI:
     # Output filename format: command_YYYY-MM-DD_<unique number starting at 1>
     #
     # Valid Commands:
-    #     Action
-    #     AutoDriveClean
-    #     AutoSupport
-    #     BackgroundClient
-    #     CAN
-    #     Connection
-    #     Encryption
-    #     Error
-    #     EtherLib
-    #     Event
-    #     Geometry
-    #     GPIO
-    #     HHM
-    #     HydraExit
-    #     Initialization
-    #     Inventory
-    #     Kernel
-    #     Lock
-    #     LogicalLibrary
-    #     Message
-    #     MLM
-    #     Motion
-    #     MotionInventory
-    #     MotionOptions
-    #     MotionRestart1
-    #     MotionRestart2
-    #     PackageUpdate
-    #     Pools
-    #     SNMP
-    #     WebServer
+    #     Action, AutoDriveClean, AutoSupport, BackgroundClient, CAN,
+    #     Connection, Encryption, Error, EtherLib, Event, Geometry, GPIO, HHM,o
+    #     HydraExit, Initialization, Inventory, Kernel, Lock, LogicalLibrary,
+    #     Message, MLM, Motion, MotionInventory, MotionOptions, MotionRestart1,
+    #     MotionRestart2, PackageUpdate, Pools, SNMP, WebServer
     #
-    # Note: the following commanda have been deprecated:
+    # Note: the following commands have been deprecated:
     #     DEPRECATED: QIP:[QIP ID]
     #     DEPRECATED: QIPDump:[QIP ID]
     #
@@ -3296,6 +3271,102 @@ class SpectraLogicAPI:
 
     #--------------------------------------------------------------------------
     #
+    # Resets the specified Hardware Health Monitoring (HHM) counter to zero. A
+    # counter is typically reset to zero following the completion of the
+    # regularly scheduled standard maintenance of the component.
+    #
+    # Input:
+    #   counter: the HHM counter to reset
+    #   subType: the name of the subtype counter to be reset
+    #            Valid values: Trip1, Trip2, None
+    #   robot:   the robot number string containing the HHM counter to reset
+    #            Valid values: "1" or "2"
+    #
+    # Caution:
+    #     Do not run this command unless you are specifically directed to do
+    #     so by Spectra Logic Support. Changing the counter values can result
+    #     in components not receiving regularly scheduled maintenance when it
+    #     is due.
+    # Notes:
+    #  1) Only one subType counter of one HMM counter can be reset in each
+    #     resetCounterData command. To reset multiple counters, you must issue
+    #     separate commands.
+    #  2) The following syntax is for a TFinity library. The syntax for other
+    #     libraries does not include the robot parameter.
+    #  3) This command corresponds to the HHM: Set Counters advanced utility in
+    #     the BlueScale user interface.
+    #
+    # Valid Values to reset:
+    #    Horizontal Axis, Vertical Axis, Picker Axis, Rotational Axis,
+    #    Magazine Axis, Toggle Axis, Side Axis, Drive to Drive Move,
+    #    Drive to Slot Move, Slot to Slot Move, Slot to Drive Move,
+    #    TAP In Move, TAP Out Move.
+    #
+    def resethhmcounter(self, counter, subType, robot):
+
+        choices=['Horizontal Axis', 'Vertical Axis', 'Picker Axis',
+                 'Rotational Axis', 'Magazine Axis', 'Toggle Axis',
+                 'Side Axis', 'Drive to Drive Move', 'Drive to Slot Move',
+                 'Slot to Slot Move', 'Slot to Drive Move', 'TAP In Move',
+                 'TAP Out Move']
+
+        subTypeChoices=['Trip1', 'Trip2', 'None']
+
+        robotChoices=['1', '2']
+
+        # Validate the counter choice
+        found = False
+        for choice in choices:
+            if (counter == choice.lower()):
+                found = True
+                break
+        if (not found):
+            raise(Exception("Error: Invalid counter '" + counter + "'"))
+
+        # Validate the subType choice
+        found = False
+        for subTypeChoice in subTypeChoices:
+            if (subType == subTypeChoice.lower()):
+                found = True
+                break
+        if (not found):
+            raise(Exception("Error: Invalid counter subType '" + subType + "'"))
+
+        # Validate the robot choice
+        found = False
+        for robotChoice in robotChoices:
+            if (robot == robotChoice.lower()):
+                found = True
+                break
+        if (not found):
+            raise(Exception("Error: Invalid robot number '" + robot + "'"))
+
+
+        try:
+            print("Resetting HHM counter '" + choice + \
+                  "' subType '" + subTypeChoice + \
+                  "' for Robot " + robotChoice)
+            sys.stdout.flush()
+
+            # Replace the spaces in the url options with %20
+            url = self.baseurl + "/HHMData.xml?action=resetCounterData&type="+ \
+                  urllib.parse.quote(choice) +                                 \
+                  "&subType=" + urllib.parse.quote(subTypeChoice) +            \
+                  "&robot=Robot%20" + robotChoice
+
+            tree = self.run_command(url)
+            for data in tree:
+                status = data.find("status")
+                message = data.find("message")
+                print("Status: " + status.text.rstrip())
+                print("Message: " + message.text.rstrip())
+                sys.stdout.flush()
+
+        except Exception as e:
+            raise
+
+    #--------------------------------------------------------------------------
+    #
     # Returns the list of system messages that are currently stored on the
     # library. The messages are listed in the order they were posted, beginning
     # with the most recent.
@@ -3646,6 +3717,28 @@ def main():
         help='Resets the specified drive by power cycling it.')
     resetdrive_parser.add_argument('driveID', action='store', help='Drive ID')
 
+    resethhmcounter_parser = cmdsubparsers.add_parser('resethhmcounter',
+        help='Resets the specified Hardware Health Monitoring (HHM) counter to\
+              zero. A counter is typically reset to zero following the        \
+              completion of the regularly scheduled standard maintenance of   \
+              the component.')
+    resethhmcounter_parser.add_argument('resethhmcounter',
+        action='store',
+        type=str.lower,
+        choices=['horizontal axis', 'vertical axis', 'picker axis',
+                 'rotational axis', 'magazine axis', 'toggle axis',
+                 'side axis', 'drive to drive move', 'drive to slot move',
+                 'slot to slot move', 'slot to drive move', 'tap in move',
+                 'tap out move'])
+    resethhmcounter_parser.add_argument('subType',
+        action='store',
+        type=str.lower,
+        choices=['trip1', 'trip2', 'none'])
+    resethhmcounter_parser.add_argument('robot',
+        action='store',
+        type=str.lower,
+        choices=['1', '2'])
+
     systemmessages_parser = cmdsubparsers.add_parser('systemmessages',
         help='Returns the list of system messages that are currently stored   \
               on the library. Most recent first.')
@@ -3739,6 +3832,10 @@ def main():
             slapi.rcmstatuslist()
         elif args.command == "resetdrive":
             slapi.resetdrive(args.driveID)
+        elif args.command == "resethhmcounter":
+            slapi.resethhmcounter(args.resethhmcounter,
+                                  args.subType,
+                                  args.robot)
         elif args.command == "systemmessages":
             slapi.systemmessages()
         elif args.command == "tasklist":

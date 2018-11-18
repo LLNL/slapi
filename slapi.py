@@ -411,6 +411,73 @@ class SpectraLogicAPI:
 
     #--------------------------------------------------------------------------
     #
+    # This command audits the terapack/magazine given the input partition,
+    # elementType and teraPackOffset.
+    #
+    def audit_tera_pack(self, partition, elementType, teraPackOffset):
+
+        itemString = "Partition '" + partition + "' " +                        \
+                     "ElementType '" + elementType + "' "                      \
+                     "TeraPackOffset '" + teraPackOffset + "'"
+
+        url = self.baseurl + "/inventory.xml?action=audit" +                   \
+                             "&partition=" + partition +                       \
+                             "&elementType=" + elementType +                   \
+                             "&TeraPackOffset=" + teraPackOffset
+
+        try:
+            # wait for an inventory command in progress to complete
+            firstTime = False
+            while (not self.check_command_progress("inventory", False)):
+                # wait 1 seconds before retrying
+                if not firstTime:
+                    print("Waiting for pending inventory command to complete...",
+                        end='')
+                    firstTime = True
+                print(".", end='')
+                time.sleep(1)
+            if firstTime:
+                print()     # newline
+        except Exception as e:
+            raise
+
+        # audit the tera pack / magazine
+        try:
+            print("Auditing " + itemString + "...", end='')
+            sys.stdout.flush()
+            audittree = self.run_command(url)
+
+            # get the immediate response
+            status = "OK"
+            for child in audittree:
+                if child.tag == "status":
+                    status = child.text.rstrip()
+                if child.tag == "message":
+                    message = child.text.rstrip()
+            if status != "OK":
+                print("failure")
+                raise(Exception("Failure auditing " + itemString + ": " +  \
+                                message))
+
+            # poll for audit to be done
+            try:
+                while (not self.check_command_progress("inventory", False)):
+                    # put out an in progress 'dot'
+                    print(".", end='')
+                    sys.stdout.flush()
+                    # wait 1 seconds before retrying
+                    time.sleep(1)
+                print("OK")
+                sys.stdout.flush()
+            except Exception as e:
+                raise(Exception("inventory audit progress Error: " + str(e),
+                                file=sys.stderr))
+        except Exception as e:
+            raise
+
+
+    #--------------------------------------------------------------------------
+    #
     # Check command progress
     # Returns True if no pending commands; False otherwise
     # verbose=True will cause messages regarding success/failure to be printed
@@ -828,6 +895,7 @@ class SpectraLogicAPI:
             tree = self.run_command(url)
 
             # get the immediate response
+            status = "OK"
             for child in tree:
                 if child.tag == "status":
                     status = child.text.rstrip()
@@ -913,6 +981,7 @@ class SpectraLogicAPI:
             tree = self.run_command(url)
 
             # get the immediate response
+            status = "OK"
             for child in tree:
                 if child.tag == "status":
                     status = child.text.rstrip()
@@ -980,6 +1049,7 @@ class SpectraLogicAPI:
             tree = self.run_command(url)
 
             # get the immediate response
+            status = "OK"
             for child in tree:
                 if child.tag == "status":
                     status = child.text.rstrip()
@@ -1065,6 +1135,130 @@ class SpectraLogicAPI:
                     if aslName.tag == "ASLName":
                         print(aslName.text.rstrip())
                         sys.stdout.flush()
+
+        except Exception as e:
+            raise
+
+
+    #--------------------------------------------------------------------------
+    #
+    # Retrieves the audit results collected by the command
+    # inventory.xml?action=audit command. The audit results can only be
+    # retrieved once.
+    #
+    # Notes:
+    #     * This command is only supported on TFinity libraries.
+    #     * This command was added with BlueScale12.7.00.01.
+    #
+    def getauditresults(self):
+
+        listFormat = '{:8} {:6} {:10} {:6} {:7} {:17} {:19}'
+
+        try:
+            # wait for a inventory command in progress to complete
+            firstTime = False
+            while (not self.check_command_progress("inventory", False)):
+                # wait 1 seconds before retrying
+                if not firstTime:
+                    print("Waiting for pending inventory command to complete...",
+                        end='')
+                    firstTime = True
+                print(".", end='')
+                time.sleep(1)
+            if firstTime:
+                print()     # newline
+        except Exception as e:
+            raise
+
+        # Get the audit results
+        try:
+            print("Getting the audit results...")
+            sys.stdout.flush()
+            url = self.baseurl + "/inventory.xml?action=getAuditResults"
+            tree = self.run_command(url)
+
+            if (len(tree) == 0):
+                print("None")
+                sys.stdout.flush()
+                return
+
+            # print header
+            print(listFormat.
+                format("SlotType", "Offset", "MagBarcode", "Match?", "SlotNum",
+                       "SlotActualBarcode", "SlotExpectedBarcode"))
+            print(listFormat.
+                format("--------", "------", "----------", "------",
+                       "-------", "-----------------", "-------------------"))
+
+            # parse the results
+            expectedList = []
+            actualList = []
+            count = 0
+            for child in tree:
+                elementType = child.find("elementType").text.rstrip()
+                offset = child.find("offset").text.rstrip()
+                barcode = child.find("barcode").text.rstrip()
+                contentsMatch = child.find("contentsMatch").text.rstrip()
+                for results in child:
+                    if (results.tag == "expectedContents"):
+                        for slot in results:
+                            expectedList.append(slot)
+                    if (results.tag == "actualContents"):
+                        for slot in results:
+                            actualList.append(slot)
+
+            # For each slot in the autual list, look for a match in the expected
+            # list.  Matching on slot number.  If found, print.
+            for slot in actualList:
+                slotNumber = slotBarcode = ""
+                for item in slot:
+                    if (item.tag == "number"):
+                        slotNumber = item.text.rstrip()
+                    if (item.tag == "barcode"):
+                        slotBarcode = item.text.rstrip()
+                for expslot in expectedList:
+                    for expitem in expslot:
+                        expNumber = expBarcode = ""
+                        if (expitem.tag == "number"):
+                            expNumber = expitem.text.rstrip()
+                        if (item.tag == "barcode"):
+                            expBarcode = expitem.text.rstrip()
+                    if (expNumber == slotNumber):
+                        # We found a match!
+                        print(listFormat.
+                            format(elementType, offset, barcode, contentsMatch,
+                                   slotNumber, slotBarcode, expBarcode))
+                        sys.stdout.flush()
+                        expectedList.remove(expslot)
+                        actualList.remove(slot)
+
+            # Any unmatched actual list items?  This means that the what we got
+            # is what we expected to get.
+            for slot in actualList:
+                slotNumber = slotBarcode = ""
+                for item in slot:
+                    if (item.tag == "number"):
+                        slotNumber = item.text.rstrip()
+                    if (item.tag == "barcode"):
+                        slotBarcode = item.text.rstrip()
+                print(listFormat.
+                    format(elementType, offset, barcode, contentsMatch,
+                           slotNumber, slotBarcode, "<Match>"))
+                sys.stdout.flush()
+
+            # Any unmatched expected list items? This means that we didn't get
+            # what we expected.
+            for slot in expectedList:
+                slotNumber = slotBarcode = ""
+                for item in slot:
+                    if (item.tag == "number"):
+                        slotNumber = item.text.rstrip()
+                    if (item.tag == "barcode"):
+                        slotBarcode = item.text.rstrip()
+                print(listFormat.
+                    format(elementType, offset, barcode, contentsMatch,
+                           slotNumber, "<No Match>", slotBarcode))
+                sys.stdout.flush()
 
         except Exception as e:
             raise
@@ -1731,6 +1925,93 @@ class SpectraLogicAPI:
                                        reminderSeverity, reminderDefThresh,
                                        reminderCurThresh, reminderPostedDate))
                             sys.stdout.flush()
+
+        except Exception as e:
+            raise
+
+
+    #--------------------------------------------------------------------------
+    #
+    # For a specified partition, this command will compare the database
+    # inventory of each TeraPack magazine to the inventory discovered by a
+    # barcode scan of the magazine. In the event of a mismatch, the inventory
+    # database is updated with the results of the scan,
+    #
+    # Notes:
+    #   1) Calls verfiyMagazineBarcodes to check all magazine barcodes against
+    #      the stored inventory.
+    #   2) Calls physInventory to get each magazine to inventory.
+    #   3) This command is only supported on TFinity libraries.
+    #   4) This command was added with BlueScale12.7.00.01.
+    #   4) Important: The offset values given by phyInventory.xml are
+    #                 one-based. The TeraPackOffset required by
+    #                 inventory.xml?action=audit is zero-based. You must
+    #                 subtract 1 from the offset value before supplying it
+    #                 as a TeraPackOffset.
+    #
+    def inventoryaudit(self, partition):
+
+        # First we need to verify magazine barcodes
+        try:
+            self.verifymagazinebarcodes()
+        except Exception as e:
+            raise
+
+        # Wait a few more minutes before issuing the partition command
+        # Testing has shown problems with issuing the physInventory too soon
+        # after verify_magazine_barcode has completed
+        print("Pausing 3 minutes before issuing physInventory...", end='')
+        sys.stdout.flush()
+        seconds = 60*3
+        while (seconds > 0):
+            print(".", end='')
+            sys.stdout.flush()
+            time.sleep(1)
+            seconds -= 1
+        print()
+        sys.stdout.flush()
+
+        numExceptions = 0
+
+        # Using the physInventory list for the partition, get each magazine to
+        # audit
+        try:
+            url  = self.baseurl + \
+                    "/physInventory.xml?action=list&partition=" + partition
+            tree = self.run_command(url)
+            magazineList = []
+            for part in tree:
+                for pool in part:
+                    if (pool.tag == "storage"):
+                        elementType = "storage"
+                    elif (pool.tag == "entryExit"):
+                        elementType = "IE"
+                    if (pool.tag != "name"):    # storage or IE
+                        for magazine in pool:
+                            if (magazine.tag == "magazine"):
+                                offset = int(magazine.find("offset").text.rstrip())
+                                teraPackOffset = offset - 1
+
+                                itemString = "Partition '" + partition + "' " +\
+                                             "elementType '" + elementType +   \
+                                             "' TeraPackOffset '" +            \
+                                             str(teraPackOffset)
+                                try:
+                                    self.audit_tera_pack(partition, elementType,
+                                                         str(teraPackOffset))
+                                    # get the results of the audit
+                                    self.getauditresults()
+
+                                except Exception as e:
+                                    # continue to the next item unless we've had
+                                    # too many of these exceptions
+                                    if (numExceptions > 10):
+                                        raise(Exception("Error: too many " +   \
+                                            "consecutive audit errors. " +     \
+                                            "Bailing!"))
+                                    else:
+                                        numExceptions += 1
+
 
         except Exception as e:
             raise
@@ -3241,6 +3522,7 @@ class SpectraLogicAPI:
             tree = self.run_command(url)
 
             # get the immediate response
+            status = "OK"
             for child in tree:
                 if child.tag == "status":
                     status = child.text.rstrip()
@@ -3519,10 +3801,89 @@ class SpectraLogicAPI:
                 elif child.tag == "pageNeedingProgressRequest":
                     print("\nPage Needing Progress Request")
                     print(  "-----------------------------")
+                    print(child.text.rstrip())
                     sys.stdout.flush()
-                    for page in child:
-                        print(page.text.rstrip)
-                        sys.stdout.flush()
+
+        except Exception as e:
+            raise
+
+
+    #--------------------------------------------------------------------------
+    #
+    # Runs the advanced utility to check all magazine barcodes against the
+    # stored inventory. Any moved or added magazine is pulled and its tapes are
+    # scanned.
+    #
+    # Notes:
+    #     * This command is supported on T200, T380, T680, T950, and TFinity
+    #       libraries.
+    #     * This utility only verifies the inventory of tapes within magazines
+    #       that were moved or added since the last inventory.
+    #     * The verification process takes 5 to 10 minutes per frame plus 1
+    #       minute for each magazine that was moved or added since the last
+    #       inventory.
+    #     * During the verification process the robot(s) is unavailable.
+    #     * This command was added with BlueScale12.6.41.
+    #
+    def verifymagazinebarcodes(self):
+
+        try:
+            url = self.baseurl + "/utils.xml?action=verifyMagazineBarcodes"
+
+            # wait for a utils command in progress to complete
+            firstTime = False
+            while (not self.check_command_progress("utils", False)):
+                # wait 1 seconds before retrying
+                if not firstTime:
+                    print("Waiting for pending utils command to complete...",
+                        end='')
+                    firstTime = True
+                print(".", end='')
+                time.sleep(1)
+            if firstTime:
+                print()     # newline
+        except Exception as e:
+            raise
+
+        # Verify magazine barcodes
+        try:
+            print("The verifyMagazineBarcode utility only verifies the",
+                  "inventory of tapes within magazines that were moved or",
+                  "added since the last inventory.")
+            print("The verification process takes 5 to 10 minutes per frame",
+                  "plus 1 minute for each magazine that was moved or added",
+                  "since the last inventory.")
+            print("\n*** During the verification process the robot(s) is",
+                  "unavailable. ***")
+            print("\nVerifying magazine barcodes...", end='')
+            sys.stdout.flush()
+            tree = self.run_command(url)
+
+            # get the immediate response
+            status = "OK"
+            for child in tree:
+                if child.tag == "status":
+                    status = child.text.rstrip()
+                if child.tag == "message":
+                    message = child.text.rstrip()
+            if status != "OK":
+                print("failure")
+                raise(Exception("Failure verifying magazine barcode : " +  \
+                                message))
+            # poll for utils to be done
+            try:
+                while (not self.check_command_progress("utils", False)):
+                    # put out an in progress 'dot'
+                    print(".", end='')
+                    sys.stdout.flush()
+                    # wait 1 seconds before retrying
+                    time.sleep(1)
+                print("OK")
+                sys.stdout.flush()
+            except Exception as e:
+                raise(Exception(
+                    "Verify magazine barcodes utils progress Error: " + str(e),
+                    file=sys.stderr))
 
         except Exception as e:
             raise
@@ -3603,6 +3964,11 @@ def main():
         help='Returns a list of the AutoSupport Log (ASL) file names          \
               currently stored on the library.')
 
+    getauditresults_parser = cmdsubparsers.add_parser('getauditresults',
+        help='Retrieves the audit results collected by the command            \
+              inventory.xml?action=audit command. The audit results can only  \
+              be retrieved once. Note: inventoryaudit calls this for you.')
+
     getcanlog_parser = cmdsubparsers.add_parser('getcanlog',
         help='Retrieves the specified zip file containing Controller Area     \
               Network (CAN) logs from the Library Control Module (LCM).')
@@ -3677,6 +4043,14 @@ def main():
         help='Returns a report showing the current data for all of the        \
               Hardware Health Monitoring (HHM) counters for the library.')
 
+    inventoryaudit_parser = cmdsubparsers.add_parser('inventoryaudit',
+        help='For the specified partition, this command compares the database  \
+              inventory of each TeraPack magazine to the inventory discovered  \
+              by a barcode scan of the magazine. In the event of a mismatch,   \
+              the inventory database is updated with the results of the scan,')
+    inventoryaudit_parser.add_argument('partition', action='store',
+        help='Spectra Logic Partition')
+
     inventorylist_parser = cmdsubparsers.add_parser('inventorylist',
         help='Lists all storage slots, entry/exit slots, and drives in the    \
               specified partition.')
@@ -3747,6 +4121,17 @@ def main():
         help='Returns the list of the extended action and background          \
               operations currently in process on the library.')
 
+    verifymagazinebarcodes_parser = cmdsubparsers.add_parser(
+        'verifymagazinebarcodes',
+        help='***USE WITH CAUTION***ROBOTS UNAVAILABLE FOR A LONG TIME WHILE     \
+              COMMAND RUNS***   \
+              Runs the advanced utility to check all magazine barcodes against \
+              the stored inventory. Any moved or added magazine is pulled and  \
+              its tapes are scanned. This utility only verifies the inventory  \
+              of tapes within magazines that were moved or added since the     \
+              last inventory. The verification process takes 5 to 10 minutes   \
+              per frame plus 1 minute for each magazine that was moved or      \
+              added since the last inventory.')
 
     args = cmdparser.parse_args()
 
@@ -3790,6 +4175,8 @@ def main():
             slapi.getaslfile(args.filename)
         elif args.command == "getaslnames":
             slapi.getaslnames()
+        elif args.command == "getauditresults":
+            slapi.getauditresults()
         elif args.command == "getcanlog":
             slapi.getcanlog(args.filename)
         elif args.command == "getcanlognames":
@@ -3814,6 +4201,8 @@ def main():
             slapi.gettrace(args.gettrace)
         elif args.command == "hhmdata":
             slapi.hhmdata()
+        elif args.command == "inventoryaudit":
+            slapi.inventoryaudit(args.partition)
         elif args.command == "inventorylist":
             slapi.inventorylist(args.partition)
         elif args.command == "librarystatus":
@@ -3840,6 +4229,8 @@ def main():
             slapi.systemmessages()
         elif args.command == "tasklist":
             slapi.tasklist()
+        elif args.command == "verifymagazinebarcodes":
+            slapi.verifymagazinebarcodes()
         else:
             cmdparser.print_help()
             sys.exit(1)

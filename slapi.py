@@ -2076,6 +2076,142 @@ class SpectraLogicAPI:
 
     #--------------------------------------------------------------------------
     #
+    # Returns a list of the current library settings.
+    #
+    def librarysettingslist(self):
+
+        topHdrFormat = '{:115} {}'
+        hdrFormat    = '{:162} {}'
+        listFormat   = '{:11} {:23} {:19} {:26} {:32} {:7} {:13} {:14} {:9} {:9} {:11} {:9}'
+
+        try:
+            url  = self.baseurl + "/librarySettings.xml?action=list"
+            tree = self.run_command(url)
+            print("\nLibrary Settings")
+            print(  "----------------")
+            if self.longlist:
+                self.long_listing(tree, 0)
+                return
+
+            if (len(tree) == 0):
+                print("None")
+                sys.stdout.flush()
+                return
+
+            # Printer header labels
+            print(topHdrFormat. \
+                format("", "-------------------------------- SNMPSettings --------------------------------"))
+            print(hdrFormat.format("", "------- TrapDestination -------"))
+            print(listFormat. \
+                format("LibraryName", "AutoLogoutTimeoutInMins",
+                       "OnlineAccessEnabled", "DrivePerfMonitoringEnabled",
+                       "AutoPowerUpAfterPowerFailEnabled", "Enabled",
+                       "SystemContact", "SystemLocation", "Community",
+                       "Community", "Description", "IPAddress"))
+            print(listFormat. \
+                format("-----------", "-----------------------",
+                       "-------------------", "--------------------------",
+                       "--------------------------------", "-------",
+                       "-------------", "--------------", "---------",
+                       "---------", "-----------", "---------"))
+
+            # Get top level settings
+            libraryName = autoLogoutTimeoutInMinutes = onlineAccessEnabled = ""
+            drivePerformanceMonitoringEnabled = ""
+            automaticPowerUpAfterPowerFailureEnabled = ""
+
+            libraryNameRec = tree.find("libraryName")
+            if libraryNameRec is not None:
+                libraryName = libraryNameRec.text.strip()
+
+            autoLogoutTimeoutInMinutesRec = tree.find("autoLogoutTimeoutInMinutes")
+            if autoLogoutTimeoutInMinutesRec is not None:
+                autoLogoutTimeoutInMinutes = autoLogoutTimeoutInMinutesRec.text.strip()
+
+            onlineAccessEnabledRec = tree.find("onlineAccessEnabled")
+            if onlineAccessEnabledRec is not None:
+                onlineAccessEnabled = onlineAccessEnabledRec.text.strip()
+
+            drivePerformanceMonitoringEnabledRec = tree.find(
+                "drivePerformanceMonitoringEnabled")
+            if drivePerformanceMonitoringEnabledRec is not None:
+                drivePerformanceMonitoringEnabled = drivePerformanceMonitoringEnabledRec.text.strip()
+
+            automaticPowerUpAfterPowerFailureEnabledRec = tree.find(
+                "automaticPowerUpAfterPowerFailureEnabled")
+            if automaticPowerUpAfterPowerFailureEnabledRec is not None:
+                automaticPowerUpAfterPowerFailureEnabled = automaticPowerUpAfterPowerFailureEnabledRec.text.strip()
+
+            community = trapCommunity = trapDescription = trapIPAddress = ""
+            for child in tree:
+
+                if child.tag == "SNMPSettings":
+
+                    enabledRec = child.find("enabled")
+                    if enabledRec is not None:
+                        enabled = enabledRec.text.strip()
+                    else:
+                        enabled = ""
+
+                    # systemContact is an odd nut since it might have a record
+                    # with no string/text attached
+                    systemContactRec = child.find("systemContact")
+                    if systemContactRec is not None:
+                        if systemContactRec.text:
+                            systemContact = systemContactRec.text.strip()
+                        else:
+                            systemContact = "None"
+                    else:
+                        systemContact = ""
+
+                    # systemLocation is an odd nut since it might have a record
+                    # with no string/text attached
+                    systemLocationRec = child.find("systemLocation")
+                    if systemLocationRec is not None:
+                        if systemLocationRec.text:
+                            systemLocation = systemLocationRec.text.strip()
+                        else:
+                            systemLocation = "None"
+                    else:
+                        systemLocation = ""
+
+                    for setting in child:
+                        if setting.tag == "community":
+                            community = setting.text.strip()
+                            trapCommunity = trapDescription = trapIPAddress = ""
+                            print(listFormat. \
+                                format(libraryName, autoLogoutTimeoutInMinutes,
+                                       onlineAccessEnabled,
+                                       drivePerformanceMonitoringEnabled,
+                                       automaticPowerUpAfterPowerFailureEnabled,
+                                       enabled, systemContact, systemLocation,
+                                       community, trapCommunity,
+                                       trapDescription, trapIPAddress))
+                        # ToDo: I wasn't able to test trapDestination 11/26/18
+                        if setting.tag == "trapDestination":
+                            for trap in setting:
+                                if trap.tag == "community":
+                                    trapCommunity = trap.text.strip()
+                                if trap.tag == "description":
+                                    trapDescription = trap.text.strip()
+                                if trap.tag == "ipAddress":
+                                    trapIPAddress = trap.text.strip()
+                            community = ""
+                            print(listFormat. \
+                                format(libraryName, autoLogoutTimeoutInMinutes,
+                                       onlineAccessEnabled,
+                                       drivePerformanceMonitoringEnabled,
+                                       automaticPowerUpAfterPowerFailureEnabled,
+                                       enabled, systemContact, systemLocation,
+                                       community, trapCommunity,
+                                       trapDescription, trapIPAddress))
+
+        except Exception as e:
+            raise
+
+
+    #--------------------------------------------------------------------------
+    #
     # Returns the library type, serial number, component status, and engineering
     # change level information for the library that received the command. With
     # headers.
@@ -4057,6 +4193,9 @@ def main():
     inventorylist_parser.add_argument('partition', action='store',
         help='Spectra Logic Partition')
 
+    librarysettingslist_parser = cmdsubparsers.add_parser('librarysettingslist',
+        help='Returns a list of the current library settings.')
+
     librarystatus_parser = cmdsubparsers.add_parser('librarystatus',
         help='Returns library type, serial number, component status and       \
               engineering change level information. With Headers')
@@ -4064,7 +4203,7 @@ def main():
         help='Returns library type, serial number, component status and       \
               engineering change level information.')
 
-    mlmsettings_ackagelist_parser = cmdsubparsers.add_parser('mlmsettings',
+    mlmsettings_parser = cmdsubparsers.add_parser('mlmsettings',
         help='Returns a list of the current Media Lifecycle Management (MLM)  \
               settings.')
 
@@ -4205,6 +4344,8 @@ def main():
             slapi.inventoryaudit(args.partition)
         elif args.command == "inventorylist":
             slapi.inventorylist(args.partition)
+        elif args.command == "librarysettingslist":
+            slapi.librarysettingslist()
         elif args.command == "librarystatus":
             slapi.librarystatus()
         elif args.command == "librarystatus2":

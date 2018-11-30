@@ -1733,6 +1733,14 @@ class SpectraLogicAPI:
             for i in range(1, tapDrawerCount+1):    # for each drawer
                 doorOpen = magazinePresent = magazineSeated = "<unknown>"
                 magazineType = rotaryPosition = "<unknown>"
+
+                # For the mainTop and mainBottom parameters, the value for
+                # drawerNumber is always 1.
+                if ( ((device == "mainTop") or (device == "mainBottom"))
+                       and
+                     (i > 1) ):
+                    continue
+
                 try:
                     url  = self.baseurl + \
                            "/mediaExchange.xml?action=getTAPState&TAPDevice=" + \

@@ -1935,7 +1935,8 @@ class SpectraLogicAPI:
     # For a specified partition, this command will compare the database
     # inventory of each TeraPack magazine to the inventory discovered by a
     # barcode scan of the magazine. In the event of a mismatch, the inventory
-    # database is updated with the results of the scan,
+    # database is updated with the results of the scan, It inventories all
+    # partitions
     #
     # Notes:
     #   1) Calls verfiyMagazineBarcodes to check all magazine barcodes against
@@ -1949,9 +1950,24 @@ class SpectraLogicAPI:
     #                 subtract 1 from the offset value before supplying it
     #                 as a TeraPackOffset.
     #
-    def inventoryaudit(self, partition):
+    def inventoryaudit(self):
 
-        # First we need to verify magazine barcodes
+        # Don't start an inventory if one is currently in progress
+        if not self.check_command_progress("inventory", True):
+            raise(Exception(
+                "Will not issue inventoryaudit command due to pending inventory command."))
+
+        # First get a list of all the paritions
+        try:
+            url  = self.baseurl + "/partitionList.xml"
+            partitionTree = self.run_command(url)
+        except Exception as e:
+            raise
+
+        if len(partitionTree) == 0:
+            raise(Exception("Error: paritionList is reporting 0 paritions"))
+
+        # Next (big step) we need to verify magazine barcodes
         try:
             self.verifymagazinebarcodes()
         except Exception as e:
@@ -1973,44 +1989,51 @@ class SpectraLogicAPI:
 
         numExceptions = 0
 
-        # Using the physInventory list for the partition, get each magazine to
-        # audit
+
+        # For each partition, use the physInventory list to get each magazine
+        # to audit
         try:
-            url  = self.baseurl + \
-                    "/physInventory.xml?action=list&partition=" + partition
-            tree = self.run_command(url)
-            magazineList = []
-            for part in tree:
-                for pool in part:
-                    if (pool.tag == "storage"):
-                        elementType = "storage"
-                    elif (pool.tag == "entryExit"):
-                        elementType = "IE"
-                    if (pool.tag != "name"):    # storage or IE
-                        for magazine in pool:
-                            if (magazine.tag == "magazine"):
-                                offset = int(magazine.find("offset").text.rstrip())
-                                teraPackOffset = offset - 1
+            for paritionName in partitionTree:
+                if (paritionName.tag != "partitionName"):
+                    continue;
+                partition = paritionName.text.strip()
+                url  = self.baseurl + \
+                       "/physInventory.xml?action=list&partition=" + partition
+                tree = self.run_command(url)
 
-                                itemString = "Partition '" + partition + "' " +\
-                                             "elementType '" + elementType +   \
-                                             "' TeraPackOffset '" +            \
-                                             str(teraPackOffset)
-                                try:
-                                    self.audit_tera_pack(partition, elementType,
-                                                         str(teraPackOffset))
-                                    # get the results of the audit
-                                    self.getauditresults()
+                magazineList = []
+                for part in tree:
+                    for pool in part:
+                        if (pool.tag == "storage"):
+                            elementType = "storage"
+                        elif (pool.tag == "entryExit"):
+                            elementType = "IE"
+                        if (pool.tag != "name"):    # storage or IE
+                            for magazine in pool:
+                                if (magazine.tag == "magazine"):
+                                    offset = int(magazine.find("offset").text.rstrip())
+                                    teraPackOffset = offset - 1
 
-                                except Exception as e:
-                                    # continue to the next item unless we've had
-                                    # too many of these exceptions
-                                    if (numExceptions > 10):
-                                        raise(Exception("Error: too many " +   \
-                                            "consecutive audit errors. " +     \
-                                            "Bailing!"))
-                                    else:
-                                        numExceptions += 1
+                                    itemString = "Partition '" + partition + "' " +\
+                                                 "elementType '" + elementType +   \
+                                                 "' TeraPackOffset '" +            \
+                                                 str(teraPackOffset)
+                                    try:
+                                        self.audit_tera_pack(partition,
+                                                             elementType,
+                                                             str(teraPackOffset))
+                                        # get the results of the audit
+                                        self.getauditresults()
+
+                                    except Exception as e:
+                                        # continue to the next item unless we've had
+                                        # too many of these exceptions
+                                        if (numExceptions > 10):
+                                            raise(Exception("Error: too many " +   \
+                                                "consecutive audit errors. " +     \
+                                                "Bailing!"))
+                                        else:
+                                            numExceptions += 1
 
 
         except Exception as e:
@@ -4180,12 +4203,10 @@ def main():
               Hardware Health Monitoring (HHM) counters for the library.')
 
     inventoryaudit_parser = cmdsubparsers.add_parser('inventoryaudit',
-        help='For the specified partition, this command compares the database  \
-              inventory of each TeraPack magazine to the inventory discovered  \
-              by a barcode scan of the magazine. In the event of a mismatch,   \
-              the inventory database is updated with the results of the scan,')
-    inventoryaudit_parser.add_argument('partition', action='store',
-        help='Spectra Logic Partition')
+        help='For each partition, this command compares the database inventory \
+              of each TeraPack magazine to the inventory discovered by a       \
+              barcode scan of the magazine. In the event of a mismatch, the    \
+              inventory database is updated with the results of the scan,')
 
     inventorylist_parser = cmdsubparsers.add_parser('inventorylist',
         help='Lists all storage slots, entry/exit slots, and drives in the    \
@@ -4341,7 +4362,7 @@ def main():
         elif args.command == "hhmdata":
             slapi.hhmdata()
         elif args.command == "inventoryaudit":
-            slapi.inventoryaudit(args.partition)
+            slapi.inventoryaudit()
         elif args.command == "inventorylist":
             slapi.inventorylist(args.partition)
         elif args.command == "librarysettingslist":

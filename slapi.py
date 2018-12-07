@@ -3457,6 +3457,166 @@ class SpectraLogicAPI:
 
     #--------------------------------------------------------------------------
     #
+    # The command performs multiple XML commands to update the library BlueScale
+    # software.
+    #
+    def packageupdate(self, filename):
+
+        # First transfer the BlueScale package to the library using the
+        # package_upload command.
+        try:
+            #self.package_upload(filename)
+            print("Upload of package '" + filename + \
+                  "' to the library's memory card complete")
+        except Exception as e:
+            raise
+
+        # Next verify that package we uploaded is listed in the list section of
+        # the XML data returned in the package.xml response.
+        try:
+            url  = self.baseurl + "/package.xml?action=list"
+            tree = self.run_command(url)
+
+            if (len(tree) == 0):
+                raise(Exception("Failure: Can't find any packages."))
+
+            listList = tree.findall("list")
+            if len(listList) == 0:
+                raise(Exception("Failure: Can't find any packages stored on the Library."))
+
+            found = False
+            for listItem in tree.iter('list'):
+                for name in listItem.iter('name'):
+                    if (name.text.rstrip() == filename):
+                        found = True
+                        break
+                if (found):
+                    break
+
+            if not found:
+                msg = "Failure: Can't find package '" + filename + "' in the " \
+                      "library's memory card. The package failed upload."
+                raise(Exception(msg))
+
+        except Exception as e:
+            raise
+
+        # Next update the library to use the BlueScale package we uploaded and
+        # automatically reboot the LCM if the package included updates to the
+        # LCM or RCM firmware.
+        try:
+            print("Updating library to use package '" + filename + "'...", end='')
+            sys.stdout.flush()
+
+            url  = self.baseurl + "/package.xml?action=update&package=" +      \
+                   filename + "&autofinish"
+            #tree = self.run_command(url)
+
+            # get the immediate response
+            status = "OK"
+            for child in tree:
+                if child.tag == "status":
+                    status = child.text.rstrip()
+                elif child.tag == "message":
+                    message = child.text.rstrip()
+            if status != "OK":
+                raise(Exception("Failure issuing package update command : " +  \
+                                message))
+
+            # poll for package update to be done
+            # ToDo: This code will probably have problems if/when the LCM
+            #       reboots. The remote connection to the library is lost when
+            #       the LCM reboots. Need to allow sufficient time for the LCM
+            #       to complete its initialization, then reconnect to the
+            #       library. How can I tell??
+            try:
+                while (not self.check_command_progress("package", False)):
+                    # put out an in progress 'dot'
+                    print(".", end='')
+                    sys.stdout.flush()
+                    # wait 1 seconds before retrying
+                    time.sleep(1)
+            except Exception as e:
+                raise(Exception("package update progress Error: " + str(e),
+                                file=sys.stderr))
+        except Exception as e:
+            raise
+
+        # ToDo:
+        # - Retrieve any system messages posted during the update process
+        #   - If the update did not require a reboot of the LCM, use:
+        #        systemMessages.xml
+        #   - If the update required a reboot of the LCM, use:
+        #        traces.xml?traceType=Message
+
+        # Confirm that the library is using the BlueScale package we just
+        # uploaded. The package we used for the update should be listed in
+        # the current section of the XML data returned in the command
+        # response.
+        try:
+            url  = self.baseurl + "/package.xml?action=list"
+            tree = self.run_command(url)
+
+            if (len(tree) == 0):
+                raise(Exception("Failure: Can't find any packages."))
+
+            listList = tree.findall("current")
+            if len(listList) == 0:
+                raise(Exception("Failure: Can't find any current packages on the Library."))
+
+            found = False
+            for listItem in tree.iter('current'):
+                for name in listItem.iter('name'):
+                    if (name.text.rstrip() == filename):
+                        found = True
+                        break
+                if (found):
+                    break
+
+            if not found:
+                msg = "Failure: Package '" + filename + "' is not currently "  \
+                      "running."
+                raise(Exception(msg))
+
+        except Exception as e:
+            raise
+
+        print("\nThe library has been successfully updated to '" + filename +  \
+              "'.")
+        sys.stdout.flush()
+
+
+    #--------------------------------------------------------------------------
+    #
+    # Wraps the "packageUpload.xml" command which is used as one of the steps to
+    # update the BlueScale Software and Library Firmware. This particular step
+    # will upload a BlueScale package file (filename) to the library's memory
+    # card.
+    #
+    def package_upload(self, filename):
+
+        # ToDo: need to send the filename using HTTP POST
+        try:
+            url  = self.baseurl + "/packageUpload.xml"
+            tree = self.run_command(url)
+
+            # get the immediate response
+            status = "OK"
+            for child in tree:
+                if child.tag == "status":
+                    status = child.text.rstrip()
+                elif child.tag == "message":
+                    message = child.text.rstrip()
+            if status != "OK":
+                raise(Exception("Failure issuing packageUpdate command : " +  \
+                                message))
+
+        except Exception as e:
+            raise
+
+
+    #--------------------------------------------------------------------------
+    #
     # Returns a list of all the partitions configured in the library.
     #
     # **NOTE** This command is different from "partition.xml?action=list"
@@ -4241,6 +4401,11 @@ def main():
               the library along with the list of packages currently stored on \
               the memory card in the LCM.')
 
+    packageupdate_parser = cmdsubparsers.add_parser('packageupdate',
+        help='Update the BlueScale Software and Library Firmware.')
+    packageupdate_parser.add_argument('filename', action='store',
+        help='BlueScale Software and Library Firmware package file')
+
     partitionlist_parser = cmdsubparsers.add_parser('partitionlist',
         help='List all Spectra Logic Library partitions.')
 
@@ -4383,6 +4548,8 @@ def main():
             slapi.mlmsettings()
         elif args.command == "packagelist":
             slapi.packagelist()
+        elif args.command == "packageupdate":
+            slapi.packageupdate(args.filename)
         elif args.command == "partitionlist":
             slapi.partitionlist()
         elif args.command == "physinventorylist":

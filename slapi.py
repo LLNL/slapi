@@ -431,7 +431,7 @@ class SpectraLogicAPI:
             while (not self.check_command_progress("inventory", False)):
                 # wait 1 seconds before retrying
                 if not firstTime:
-                    print("Waiting for pending inventory command to complete...",
+                    print("\nWaiting for pending inventory command to complete...",
                         end='')
                     firstTime = True
                 print(".", end='')
@@ -443,7 +443,7 @@ class SpectraLogicAPI:
 
         # audit the tera pack / magazine
         try:
-            print("Auditing " + itemString + "...", end='')
+            print("\nAuditing " + itemString + "...", end='')
             sys.stdout.flush()
             audittree = self.run_command(url)
 
@@ -1172,28 +1172,25 @@ class SpectraLogicAPI:
 
         # Get the audit results
         try:
-            print("Getting the audit results...")
+            print("Getting the audit results...", end='')
             sys.stdout.flush()
             url = self.baseurl + "/inventory.xml?action=getAuditResults"
             tree = self.run_command(url)
+
+            # DEBUG
+            #tree = self.create_audit_results_XML_records()
+
 
             if (len(tree) == 0):
                 print("None")
                 sys.stdout.flush()
                 return
 
-            # print header
-            print(listFormat.
-                format("SlotType", "Offset", "MagBarcode", "Match?", "SlotNum",
-                       "SlotActualBarcode", "SlotExpectedBarcode"))
-            print(listFormat.
-                format("--------", "------", "----------", "------",
-                       "-------", "-----------------", "-------------------"))
-
             # parse the results
-            expectedList = []
             actualList = []
+            contentsMatch = "yes"
             count = 0
+            expectedList = []
             for child in tree:
                 elementType = child.find("elementType").text.rstrip()
                 offset = child.find("offset").text.rstrip()
@@ -1206,59 +1203,138 @@ class SpectraLogicAPI:
                     if (results.tag == "actualContents"):
                         for slot in results:
                             actualList.append(slot)
+            print("TeraPack (" + barcode + "):")
 
-            # For each slot in the autual list, look for a match in the expected
-            # list.  Matching on slot number.  If found, print.
-            for slot in actualList:
-                slotNumber = slotBarcode = ""
-                for item in slot:
-                    if (item.tag == "number"):
-                        slotNumber = item.text.rstrip()
-                    if (item.tag == "barcode"):
-                        slotBarcode = item.text.rstrip()
-                for expslot in expectedList:
-                    for expitem in expslot:
-                        expNumber = expBarcode = ""
-                        if (expitem.tag == "number"):
-                            expNumber = expitem.text.rstrip()
-                        if (item.tag == "barcode"):
-                            expBarcode = expitem.text.rstrip()
-                    if (expNumber == slotNumber):
-                        # We found a match!
+
+            # Use the magazine barcode to figure out what kind of magazine
+            # we're dealing with (10 slot vs 9 slot).
+            try:
+                numSlots = self.get_magazine_slot_count(barcode)
+            except Exception as e:
+                numSlots = 0
+            if (numSlots == 0):
+                raise(Exception("Internal Error: Unable to get the number " +  \
+                                "of slots in TeraPack '" + barcode + "'"))
+
+            # If getAuditResults is reporting a match problem, send out a
+            # message highlighting this information. When contentsMatch is "no"
+            # then we should find expectedContents records.
+            if (contentsMatch.lower() == "no"):
+                print("\n*** The library is reporting an inventory MISMATCH " +\
+                      "on this TeraPack (" + barcode + ") ***\n")
+                if (len(expectedList) == 0):
+                    # I don't think I want to throw an exception here because I
+                    # want the audit to continue.  Instead put out error
+                    # messages.
+                    print("Internal Error: No expectedContents records " +     \
+                          "were returned in the Audit Results even though " +  \
+                          "the library reported a MISMATCH. Investigation " +  \
+                          "needed.")
+            else:
+                print("")
+
+            # print header
+            print(listFormat.
+                format("SlotType", "Offset", "MagBarcode", "Match?", "SlotNum",
+                       "SlotActualBarcode", "SlotExpectedBarcode"))
+            print(listFormat.
+                format("--------", "------", "----------", "------",
+                       "-------", "-----------------", "-------------------"))
+
+            reportedSlotList = []
+            if (contentsMatch.lower() == "no"):
+                # For each slot in the autual list, look for a match in the
+                # expected list.  Matching on slot number.  If found, print.
+                for slot in actualList:
+                    slotNumber = slot.find("number").text.rstrip()
+                    slotBarcode = slot.find("barcode").text.rstrip()
+                    reported = False
+                    for expslot in expectedList:
+                        expNumber = expslot.find("number").text.rstrip()
+                        expBarcode = expslot.find("barcode").text.rstrip()
+                        if (expNumber == slotNumber):
+                            if (expBarcode == slotBarcode):
+                                # We found a match!
+                                print(listFormat.
+                                    format(elementType, offset, barcode, "yes",
+                                           slotNumber, slotBarcode, expBarcode))
+                                sys.stdout.flush()
+                            else:
+                                # The barcodes don't match; report it.
+                                print(listFormat.
+                                    format(elementType, offset, barcode, "no",
+                                           slotNumber, slotBarcode, expBarcode))
+                                sys.stdout.flush()
+                            reported = True
+                            reportedSlotList.append(slotNumber)
+                            break
+                    if (not reported):
+                        # We didn't find actual slot item in the expected list.
+                        # This means that we encountered a new item.
                         print(listFormat.
-                            format(elementType, offset, barcode, contentsMatch,
-                                   slotNumber, slotBarcode, expBarcode))
+                            format(elementType, offset, barcode, "no",
+                                   slotNumber, slotBarcode, "<<NEW>>"))
                         sys.stdout.flush()
-                        expectedList.remove(expslot)
-                        actualList.remove(slot)
+                        reportedSlotList.append(slotNumber)
 
-            # Any unmatched actual list items?  This means that the what we got
-            # is what we expected to get.
-            for slot in actualList:
-                slotNumber = slotBarcode = ""
-                for item in slot:
-                    if (item.tag == "number"):
-                        slotNumber = item.text.rstrip()
-                    if (item.tag == "barcode"):
-                        slotBarcode = item.text.rstrip()
-                print(listFormat.
-                    format(elementType, offset, barcode, contentsMatch,
-                           slotNumber, slotBarcode, "<Match>"))
-                sys.stdout.flush()
+                # Is there anything on the expected list that wasn't on the
+                # actual list??
+                for expslot in expectedList:
+                    expNumber = expslot.find("number").text.rstrip()
+                    expBarcode = expslot.find("barcode").text.rstrip()
+                    reported = False
+                    for slot in actualList:
+                        slotNumber = slot.find("number").text.rstrip()
+                        slotBarcode = slot.find("barcode").text.rstrip()
+                        if (expNumber == slotNumber):
+                            reported = True
+                            break
+                    if (not reported):
+                        # This means that we encountered an item that went
+                        # missing
+                        print(listFormat.
+                            format(elementType, offset, barcode, "no",
+                                   expNumber, "<<MISSING>>", expBarcode))
+                        sys.stdout.flush()
+                        reportedSlotList.append(expNumber)
 
-            # Any unmatched expected list items? This means that we didn't get
-            # what we expected.
-            for slot in expectedList:
-                slotNumber = slotBarcode = ""
-                for item in slot:
-                    if (item.tag == "number"):
-                        slotNumber = item.text.rstrip()
-                    if (item.tag == "barcode"):
-                        slotBarcode = item.text.rstrip()
-                print(listFormat.
-                    format(elementType, offset, barcode, contentsMatch,
-                           slotNumber, "<No Match>", slotBarcode))
-                sys.stdout.flush()
+                # Now for one other case.  Lets see if every slot was reported.
+                # If a slot hasn't been reported, then we need to report that!
+                for i in range(1, numSlots):
+                    match = False
+                    for item in reportedSlotList:
+                        if (item == str(i)):
+                            match = True
+                            break
+                    if (not match):
+                        print(listFormat.
+                            format(elementType, offset, barcode, "no",
+                                   str(i), "<<NOT REPORTED>>", "<<NOT REPORTED>>"))
+                        sys.stdout.flush()
+                        reportedSlotList.append(str(i))
+            else:
+                # No Mismatch was reported by the library. So, just print the
+                # actualList.
+                for slot in actualList:
+                    slotNumber = slot.find("number").text.rstrip()
+                    slotBarcode = slot.find("barcode").text.rstrip()
+                    print(listFormat.
+                        format(elementType, offset, barcode, "yes",
+                               slotNumber, slotBarcode, slotBarcode))
+                    sys.stdout.flush()
+                    reportedSlotList.append(slotNumber)
+
+            # Let's be paranoid and verify that:
+            # - we have the expected number of slots in the actual list.
+            # - the number of items reported is the number of slots
+            if (numSlots != len(actualList)):
+                print("MISMATCH Error: library returned '" +                   \
+                      str(len(actualList)) + "' items for this TeraPack; " +   \
+                      "expected '" + str(numSlots) + "' items.")
+            if (numSlots != len(reportedSlotList)):
+                print("MISMATCH Error: reported '" +                           \
+                      str(len(reportedSlotList)) + "' items for this TeraPack; " +  \
+                      "expected " + str(numSlots) + " items.")
 
         except Exception as e:
             raise
@@ -1452,6 +1528,48 @@ class SpectraLogicAPI:
 
         except Exception as e:
             raise
+
+
+    #--------------------------------------------------------------------------
+    #
+    # Returns the number of slots in the magazine based on the magazine's
+    # barcode.
+    #
+    # The TeraPack barcodes are different between LTO TeraPacks and TS11x0
+    # TeraPacks. The first 2 letters will differ and will always be the same
+    # for the Magazine type.
+    #    - LTO TeraPacks/magazine barcode start with a "LU"
+    #    - TS11x0 TeraPacks/magazine barcode start with a "JU"
+    # Cleaning TeraPacks also have a unique barcode as well for each media
+    # type.
+    #    - LTO cleaning tape TeraPacks/magazine barcode start with a "CL"
+    #    - TS11x0 cleaning tape TeraPacks/magazines barcode start with a "CJ"
+    #
+    # So....since
+    #    - LTO    TaraPacks/magazines have 10 slots.
+    #    - TS11x0 TaraPacks/magazines have  9 slots.
+    # Then:
+    #    - 10 slots in an LTO TeraPack/magazine with "LU"
+    #    - 10 slot LTO cleaning TeraPack/magazine with "CL"
+    #    -  9 slots in a TS11x0 TeraPack/magazine with "JU"
+    #    -  9 slots TS11x0 cleaning TeraPack/magazine with "CJ"
+    #
+    # Returns 0 upon exception
+    #
+    def get_magazine_slot_count(self, barcode):
+
+        try:
+            if (barcode.startswith("LU")):
+                return(10)
+            elif (barcode.startswith("CL")):
+                return(10)
+            elif (barcode.startswith("JU")):
+                return(9)
+            elif (barcode.startswith("CJ")):
+                return(9)
+        except Exception as e:
+            print("get_magazine_slot_count Error: " + str(e), file=sys.stderr)
+            return(0)
 
 
     #--------------------------------------------------------------------------
@@ -2019,6 +2137,12 @@ class SpectraLogicAPI:
                         if (pool.tag != "name"):    # storage or IE
                             for magazine in pool:
                                 if (magazine.tag == "magazine"):
+                                    # Important: The offset values given by
+                                    # phyInventory.xml are one-based. The
+                                    # TeraPackOffset required by
+                                    # inventory.xml?action=audit is zero-based.
+                                    # You must subtract 1 from the offset value
+                                    # before supplying it as a TeraPackOffset.
                                     offset = int(magazine.find("offset").text.rstrip())
                                     teraPackOffset = offset - 1
 
@@ -4214,6 +4338,165 @@ class SpectraLogicAPI:
 
         except Exception as e:
             raise
+
+#==============================================================================
+# This area defines some routines for unit testing
+
+    #--------------------------------------------------------------------------
+    #
+    # This routine will return an ElementTree for testing getAuditResults XML
+    # (the audit results for one TeraPack).
+    #
+    def create_audit_results_XML_records(self):
+
+        try:
+            inventory = xml.etree.ElementTree.Element("inventory")
+
+            auditResults = xml.etree.ElementTree.SubElement(inventory, "auditResults")
+
+            elementType = xml.etree.ElementTree.SubElement(auditResults, "elementType")
+            elementType.text = "storage"
+
+            offset = xml.etree.ElementTree.SubElement(auditResults, "offset")
+            offset.text = "1"
+
+            magbarcode = xml.etree.ElementTree.SubElement(auditResults, "barcode")
+            #magbarcode.text = "CL0123X" # LTO (10 slots)
+            magbarcode.text = "CJ0123X" # TS11xx (9 slots)
+
+            contentsMatch = xml.etree.ElementTree.SubElement(auditResults, "contentsMatch")
+            contentsMatch.text = "no"
+
+            expectedContents = xml.etree.ElementTree.SubElement(auditResults, "expectedContents")
+
+            slot = xml.etree.ElementTree.SubElement(expectedContents, "slot")
+            number = xml.etree.ElementTree.SubElement(slot, "number")
+            number.text = "1"
+            barcode = xml.etree.ElementTree.SubElement(slot, "barcode")
+            barcode.text = "CLN001LX"
+
+            slot = xml.etree.ElementTree.SubElement(expectedContents, "slot")
+            number = xml.etree.ElementTree.SubElement(slot, "number")
+            number.text = "2"
+            barcode = xml.etree.ElementTree.SubElement(slot, "barcode")
+            barcode.text = "CLN002LX"
+
+            slot = xml.etree.ElementTree.SubElement(expectedContents, "slot")
+            number = xml.etree.ElementTree.SubElement(slot, "number")
+            number.text = "3"
+            barcode = xml.etree.ElementTree.SubElement(slot, "barcode")
+            barcode.text = "CLN003LX"
+
+            slot = xml.etree.ElementTree.SubElement(expectedContents, "slot")
+            number = xml.etree.ElementTree.SubElement(slot, "number")
+            number.text = "4"
+            barcode = xml.etree.ElementTree.SubElement(slot, "barcode")
+            barcode.text = "CLN004LX"
+
+            slot = xml.etree.ElementTree.SubElement(expectedContents, "slot")
+            number = xml.etree.ElementTree.SubElement(slot, "number")
+            number.text = "5"
+            barcode = xml.etree.ElementTree.SubElement(slot, "barcode")
+            barcode.text = "CLN005LX"
+
+            #slot = xml.etree.ElementTree.SubElement(expectedContents, "slot")
+            #number = xml.etree.ElementTree.SubElement(slot, "number")
+            #number.text = "6"
+            #barcode = xml.etree.ElementTree.SubElement(slot, "barcode")
+            #barcode.text = "CLN006LX"
+
+            slot = xml.etree.ElementTree.SubElement(expectedContents, "slot")
+            number = xml.etree.ElementTree.SubElement(slot, "number")
+            number.text = "7"
+            barcode = xml.etree.ElementTree.SubElement(slot, "barcode")
+            barcode.text = "CLN007LX"
+
+            slot = xml.etree.ElementTree.SubElement(expectedContents, "slot")
+            number = xml.etree.ElementTree.SubElement(slot, "number")
+            number.text = "8"
+            barcode = xml.etree.ElementTree.SubElement(slot, "barcode")
+            barcode.text = "CLN008LX"
+            #barcode.text = "CLNXX8LX"
+
+            #slot = xml.etree.ElementTree.SubElement(expectedContents, "slot")
+            #number = xml.etree.ElementTree.SubElement(slot, "number")
+            #number.text = "9"
+            #barcode = xml.etree.ElementTree.SubElement(slot, "barcode")
+            #barcode.text = "CLN009LX"
+
+            slot = xml.etree.ElementTree.SubElement(expectedContents, "slot")
+            number = xml.etree.ElementTree.SubElement(slot, "number")
+            number.text = "10"
+            barcode = xml.etree.ElementTree.SubElement(slot, "barcode")
+            barcode.text = "CLN010LX"
+
+            actualContents = xml.etree.ElementTree.SubElement(auditResults, "actualContents")
+
+            slot = xml.etree.ElementTree.SubElement(actualContents, "slot")
+            number = xml.etree.ElementTree.SubElement(slot, "number")
+            number.text = "1"
+            barcode = xml.etree.ElementTree.SubElement(slot, "barcode")
+            #barcode.text = "CLN001LX"
+            barcode.text = "CLNBADLX"
+
+            #slot = xml.etree.ElementTree.SubElement(actualContents, "slot")
+            #number = xml.etree.ElementTree.SubElement(slot, "number")
+            #number.text = "2"
+            #barcode = xml.etree.ElementTree.SubElement(slot, "barcode")
+            #barcode.text = "CLN002LX"
+
+            slot = xml.etree.ElementTree.SubElement(actualContents, "slot")
+            number = xml.etree.ElementTree.SubElement(slot, "number")
+            number.text = "3"
+            barcode = xml.etree.ElementTree.SubElement(slot, "barcode")
+            barcode.text = "CLN003LX"
+
+            #slot = xml.etree.ElementTree.SubElement(actualContents, "slot")
+            #number = xml.etree.ElementTree.SubElement(slot, "number")
+            #number.text = "4"
+            #barcode = xml.etree.ElementTree.SubElement(slot, "barcode")
+            #barcode.text = "CLN004LX"
+
+            slot = xml.etree.ElementTree.SubElement(actualContents, "slot")
+            number = xml.etree.ElementTree.SubElement(slot, "number")
+            number.text = "5"
+            barcode = xml.etree.ElementTree.SubElement(slot, "barcode")
+            barcode.text = "CLN005LX"
+
+            #slot = xml.etree.ElementTree.SubElement(actualContents, "slot")
+            #number = xml.etree.ElementTree.SubElement(slot, "number")
+            #number.text = "6"
+            #barcode = xml.etree.ElementTree.SubElement(slot, "barcode")
+            #barcode.text = "CLN006LX"
+
+            slot = xml.etree.ElementTree.SubElement(actualContents, "slot")
+            number = xml.etree.ElementTree.SubElement(slot, "number")
+            number.text = "7"
+            barcode = xml.etree.ElementTree.SubElement(slot, "barcode")
+            barcode.text = "CLN007LX"
+
+            slot = xml.etree.ElementTree.SubElement(actualContents, "slot")
+            number = xml.etree.ElementTree.SubElement(slot, "number")
+            number.text = "8"
+            barcode = xml.etree.ElementTree.SubElement(slot, "barcode")
+            barcode.text = "CLN008LX"
+
+            slot = xml.etree.ElementTree.SubElement(actualContents, "slot")
+            number = xml.etree.ElementTree.SubElement(slot, "number")
+            number.text = "9"
+            barcode = xml.etree.ElementTree.SubElement(slot, "barcode")
+            barcode.text = "CLN009LX"
+
+            slot = xml.etree.ElementTree.SubElement(actualContents, "slot")
+            number = xml.etree.ElementTree.SubElement(slot, "number")
+            number.text = "10"
+            barcode = xml.etree.ElementTree.SubElement(slot, "barcode")
+            barcode.text = "CLN010LX"
+
+        except Exception as e:
+            raise(Exception("create_audit_results_XML_records Error creating XML"))
+
+        return(inventory)
 
 
 #==============================================================================

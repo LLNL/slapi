@@ -778,45 +778,15 @@ class SpectraLogicAPI:
                 for element in drive:
                     if element.tag == "ID":
                         myid = element.text.rstrip()
-                        # TBD #####
+                        # ToDo #####
                         # Getting "returned an invalid load count" when running
                         # the command while testing on NERF. So comment out for
                         # now. Todd sent email to Spectra. 10/16/18
                         # 10/17/18: Spectra believes that the problem is because
                         # the drive has never been loaded since the firmware
-                        # update. So told me to load/unload. I tried that, but
-                        # am now having HW problems.
+                        # update. So told me to load/unload.
+                        # 01/18:19: problem still exists.
                         loadCount = self.get_drive_load_count(myid)
-
-                        #try:
-                        #    url2 = self.baseurl + "/driveList.xml?action=getDriveLoadCount&driveName=" + "FR2/DBA1/fLTO-DRV1"
-                        #    print("url2: " + url2)
-                        #    driveLoadTree = self.run_command(url2)
-                        #except Exception as e:
-                        #    print("DriveList LTO-DRV1 Error: " + str(e), file=sys.stderr)
-
-                        #try:
-                        #    url2 = self.baseurl + "/driveList.xml?action=getDriveLoadCount&driveName=" + "FR2/DBA1/fLTO-DRV2"
-                        #    print("url2: " + url2)
-                        #    driveLoadTree = self.run_command(url2)
-                        #except Exception as e:
-                        #    print("DriveList LTO-DRV2 Error: " + str(e), file=sys.stderr)
-
-                        #try:
-                        #    url2 = self.baseurl + "/driveList.xml?action=getDriveLoadCount&driveName=" + "FR2/DBA6/fTS11x0-DRV3"
-                        #    print("url2: " + url2)
-                        #    driveLoadTree = self.run_command(url2)
-                        #except Exception as e:
-                        #    print("DriveList TS11x0-DRV3 Error: " + str(e), file=sys.stderr)
-
-                        #try:
-                        #    url2 = self.baseurl + "/driveList.xml?action=getDriveLoadCount&driveName=" + "FR2/DBA6/fTS11x0-DRV4"
-                        #    print("url2: " + url2)
-                        #    driveLoadTree = self.run_command(url2)
-                        #except Exception as e:
-                        #    print("DriveList TS11x0-DRV4 Error: " + str(e), file=sys.stderr)
-                        #return
-
                     elif element.tag == "driveStatus":
                         status = element.text.rstrip()
                     elif element.tag == "partition":
@@ -2131,7 +2101,6 @@ class SpectraLogicAPI:
                        "/physInventory.xml?action=list&partition=" + partition
                 tree = self.run_command(url)
 
-                magazineList = []
                 for part in tree:
                     for pool in part:
                         if (pool.tag == "storage"):
@@ -3783,8 +3752,8 @@ class SpectraLogicAPI:
     #
     def physinventorylist(self, partition):
 
-        topHdrFormat = '{:19} {}'
-        listFormat = '{:8} {:9} {:6} {:7} {:5} {:7} {:6} {:6} {:11}'
+        topHdrFormat = '{:26} {}'
+        listFormat = '{:15} {:9} {:6} {:7} {:5} {:7} {:6} {:6} {:11}'
 
         try:
             url  = self.baseurl + "/physInventory.xml?action=list&partition=" + partition
@@ -3801,7 +3770,7 @@ class SpectraLogicAPI:
                     format("Parition", "MediaPool", "Offset", "Barcode",
                            "Frame", "TapeBay", "Drawer", "Slot", "SlotBarcode"))
                 print(listFormat.
-                    format("--------", "---------", "------", "-------",
+                    format("---------------", "---------", "------", "-------",
                            "-----", "-------", "------", "------",
                            "-----------"))
                 sys.stdout.flush()
@@ -3818,19 +3787,23 @@ class SpectraLogicAPI:
                                 frameNumber = magazine.find("frameNumber").text.rstrip()
                                 tapeBayNumber = magazine.find("tapeBayNumber").text.rstrip()
                                 drawerNumber = magazine.find("drawerNumber").text.rstrip()
-                                for element in magazine:
-                                    if (element.tag == "slot"):
-                                        for slot in element:
-                                            if (slot.tag == "number"):
-                                                slotNumber = slot.text.rstrip()
-                                            if (slot.tag == "barcode"):
-                                                slotBarcode = slot.text.rstrip()
+                                slotNumber = slotBarcode = ""
+                                slotList = magazine.findall("slot")
+                                if not slotList:
+                                    print(listFormat.
+                                        format(partition, mediaPool, offset,
+                                               barcode, frameNumber,
+                                               tapeBayNumber, drawerNumber,
+                                               slotNumber, slotBarcode))
+                                else:
+                                    for slot in slotList:
+                                        slotNumber = slot.find("number").text.rstrip()
+                                        slotBarcode = slot.find("barcode").text.rstrip()
                                         print(listFormat.
                                             format(partition, mediaPool, offset,
-                                                barcode, frameNumber,
-                                                tapeBayNumber, drawerNumber,
-                                                slotNumber, slotBarcode))
-                                        sys.stdout.flush()
+                                                   barcode, frameNumber,
+                                                   tapeBayNumber, drawerNumber,
+                                                   slotNumber, slotBarcode))
 
         except Exception as e:
             raise

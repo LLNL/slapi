@@ -730,7 +730,7 @@ class SpectraLogicAPI:
     #
     def drivelist(self):
 
-        driveFormat = '{:25} {:11} {:8} {:12} {:25} {:15} {:15} {:13} {:11} {:25} {:9} {:7} {:6} {:9} {:10} {:8} {:14} {:15}'
+        driveFormat = '{:25} {:11} {:15} {:12} {:25} {:15} {:15} {:13} {:11} {:25} {:9} {:7} {:6} {:9} {:10} {:8} {:14} {:15}'
 
         try:
             url  = self.baseurl + "/driveList.xml?action=list"
@@ -751,7 +751,7 @@ class SpectraLogicAPI:
                 sys.stdout.flush()
                 return
             print(driveFormat. \
-                format("ID", "DriveStatus", "Parition",
+                format("ID", "DriveStatus", "Partition",
                        "PartDriveNum", "DriveType",
                        "SerialNum", "MfrSerialNum", "DriveFirmware",
                        "DCMFirmware", "WWN", "FibreAddr",
@@ -759,13 +759,13 @@ class SpectraLogicAPI:
                        "SparedWith", "SpareFor", "SparePotential",
                        "FirmwareStaging"))
             print(driveFormat. \
-                format("-------------------------", "-----------", "--------",
-                       "------------", "-------------------------",
-                       "---------------", "---------------", "-------------",
-                       "-----------", "-------------------------", "---------",
-                       "-------", "------", "---------",
-                       "----------", "--------", "--------------",
-                       "---------------"))
+                format("-------------------------", "-----------",
+                       "---------------", "------------",
+                       "-------------------------", "---------------",
+                       "---------------", "-------------", "-----------",
+                       "-------------------------", "---------", "-------",
+                       "------", "---------", "----------", "--------",
+                       "--------------", "---------------"))
             sys.stdout.flush()
             for drive in tree:
                 myid = status = partition = paritionDriveNum = ""
@@ -2156,7 +2156,7 @@ class SpectraLogicAPI:
     #
     def inventorylist(self, partition):
 
-        listFormat = '{:9} {:13} {:6} {:6} {:10} {:6} {:4}'
+        listFormat = '{:15} {:13} {:6} {:6} {:10} {:6} {:4}'
 
         try:
             url       = self.baseurl + "/inventory.xml?action=list&partition=" + partition
@@ -2171,7 +2171,7 @@ class SpectraLogicAPI:
                     format("Partition", "SlotType", "ID", "Offset", "Barcode",
                            "Queued", "Full"))
                 print(listFormat.
-                    format("---------", "-------------", "------", "------",
+                    format("---------------", "-------------", "------", "------",
                            "----------", "------", "----"))
                 sys.stdout.flush()
                 for elt in part:
@@ -2348,7 +2348,7 @@ class SpectraLogicAPI:
 
         topFormat = '{:11} {:11} {:9}'
         robotFormat = '{:6} {:9} {:15} {:12} {:19} {:28} {:23} {:32} {:11} {:13} {:14} {:17}'
-        moveFormat  = '{:12} {:12} {:12} {:12} {:20} {:19}'
+        moveFormat  = '{:15} {:12} {:12} {:12} {:20} {:19}'
         controllerFormat = '{:25} {:13} {:11} {:11} {:14}'
         driveCMFormat = '{:25} {:13} {:12} {:16} {:15}'
         powerSupplyFRUFormat = '{:25} {:12} {:13} {:11} {:9} {:8} {:11} {:9} {:8} {:20} {:13} {:13} {:20} {:9} {:9} {:9}'
@@ -2473,7 +2473,7 @@ class SpectraLogicAPI:
                                "NumFailures", "LastSenseInfo",
                                "LastFailedMoveTime"))
                     print(moveFormat. \
-                        format("------------", "------------", "------------",
+                        format("---------------", "------------", "------------",
                                "------------", "--------------------",
                                "-------------------"))
                     sys.stdout.flush()
@@ -3767,7 +3767,7 @@ class SpectraLogicAPI:
                 print(topHdrFormat.format("",
                     "----------------------Magazine-----------------------"))
                 print(listFormat.
-                    format("Parition", "MediaPool", "Offset", "Barcode",
+                    format("Partition", "MediaPool", "Offset", "Barcode",
                            "Frame", "TapeBay", "Drawer", "Slot", "SlotBarcode"))
                 print(listFormat.
                     format("---------------", "---------", "------", "-------",

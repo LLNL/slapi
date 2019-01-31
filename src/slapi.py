@@ -2249,25 +2249,29 @@ class SpectraLogicAPI:
             automaticPowerUpAfterPowerFailureEnabled = ""
 
             libraryNameRec = tree.find("libraryName")
-            if libraryNameRec is not None:
+            if ( (libraryNameRec is not None) and (len(libraryNameRec) > 0) ):
                 libraryName = libraryNameRec.text.strip()
 
             autoLogoutTimeoutInMinutesRec = tree.find("autoLogoutTimeoutInMinutes")
-            if autoLogoutTimeoutInMinutesRec is not None:
+            if ( (autoLogoutTimeoutInMinutesRec is not None) and
+                 (len(autoLogoutTimeoutInMinutesRec) > 0) ):
                 autoLogoutTimeoutInMinutes = autoLogoutTimeoutInMinutesRec.text.strip()
 
             onlineAccessEnabledRec = tree.find("onlineAccessEnabled")
-            if onlineAccessEnabledRec is not None:
+            if ( (onlineAccessEnabledRec is not None) and 
+                 (len(onlineAccessEnabledRec) > 0) ):
                 onlineAccessEnabled = onlineAccessEnabledRec.text.strip()
 
             drivePerformanceMonitoringEnabledRec = tree.find(
                 "drivePerformanceMonitoringEnabled")
-            if drivePerformanceMonitoringEnabledRec is not None:
+            if ( (drivePerformanceMonitoringEnabledRec is not None) and
+                 (len(drivePerformanceMonitoringEnabledRec) > 0) ):
                 drivePerformanceMonitoringEnabled = drivePerformanceMonitoringEnabledRec.text.strip()
 
             automaticPowerUpAfterPowerFailureEnabledRec = tree.find(
                 "automaticPowerUpAfterPowerFailureEnabled")
-            if automaticPowerUpAfterPowerFailureEnabledRec is not None:
+            if ( (automaticPowerUpAfterPowerFailureEnabledRec is not None) and
+                 (len(automaticPowerUpAfterPowerFailureEnabledRec) > 0) ):
                 automaticPowerUpAfterPowerFailureEnabled = automaticPowerUpAfterPowerFailureEnabledRec.text.strip()
 
             community = trapCommunity = trapDescription = trapIPAddress = ""

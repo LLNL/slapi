@@ -7,6 +7,7 @@ import stat
 import time
 import pathlib
 import configparser
+import requests
 import urllib.request
 import urllib.error
 import http.cookiejar
@@ -113,14 +114,32 @@ class SpectraLogicAPI:
 
     #--------------------------------------------------------------------------
     #
+    def clear_cookie(self):
+        try:
+            tmpserver = self.server
+            if tmpserver.find(".") == -1:
+                tmpserver = tmpserver + ".local"
+            for cookie in self.cookiejar:
+                if cookie.domain == tmpserver:
+                    self.cookiejar.clear(cookie.domain)
+        except Exception as e:
+            self.loggedin  = False
+            self.sessionid = ""
+
+
+    #--------------------------------------------------------------------------
+    #
     def load_cookie(self):
 
         try:
+            tmpserver = self.server
+            if tmpserver.find(".") == -1:
+                tmpserver = tmpserver + ".local"
             self.cookiejar.load(self.cookiefile, ignore_discard=True, ignore_expires=False)
             for cookie in self.cookiejar:
-                if cookie.domain == self.server and cookie.name == "sessionID":
+                if cookie.domain == tmpserver and cookie.name == "sessionID":
                     if cookie.is_expired() or self.cookie_is_old():
-                        self.cookiejar.clear(self.server)
+                        self.clear_cookie()
                         os.umask(0o077)
                         self.cookiejar.save(self.cookiefile, ignore_discard=True, ignore_expires=False)
                         self.loggedin  = False
@@ -189,13 +208,14 @@ class SpectraLogicAPI:
     # Runs the XML command
     # Returns an XML element tree
     #
-    def run_command(self, url):
+    def run_command(self, url, filename = None):
 
         try:
 
             if self.verbose:
+                tmpurl = url.replace(self.passwd, "*" * len(self.passwd))
                 print("--------------------------------------------------", file=sys.stderr)
-                print("Command: " + url, file=sys.stderr)
+                print("Command: " + tmpurl, file=sys.stderr)
                 print("--------------------------------------------------", file=sys.stderr)
                 print("", file=sys.stderr)
 
@@ -245,14 +265,36 @@ class SpectraLogicAPI:
             # or AES as these do overlap with the aNULL ciphers. When in doubt,
             # include !aNULL in your cipherlist.
 
-            context = ssl._create_unverified_context()
-            #context.set_ciphers('HIGH:!aNULL:!eNULL')
-            context.set_ciphers('MEDIUM:!aNULL:!eNULL')
+            #cipherstr = 'HIGH:!aNULL:!eNULL'
+            cipherstr = 'MEDIUM:!aNULL:!eNULL'
 
-            opener    = urllib.request.build_opener(urllib.request.HTTPSHandler(context=context), urllib.request.HTTPCookieProcessor(self.cookiejar))
-            opener.addheaders.append(("Cookie", "sessionID=" + self.sessionid))
-            request   = urllib.request.Request(url)
-            response  = opener.open(request)
+            context = ssl._create_unverified_context()
+            context.set_ciphers(cipherstr)
+
+            if (filename is None):
+                opener    = urllib.request.build_opener(urllib.request.HTTPSHandler(context=context), urllib.request.HTTPCookieProcessor(self.cookiejar))
+                opener.addheaders.append(("Cookie", "sessionID=" + self.sessionid))
+                request   = urllib.request.Request(url)
+                response  = opener.open(request, timeout=10)
+            else:
+                requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
+                requests.packages.urllib3.util.ssl_.DEFAULT_CIPHERS = cipherstr
+                #http.client.HTTPConnection.debuglevel = 1
+                #logging.basicConfig()
+                #logging.getLogger().setLevel(logging.DEBUG)
+
+                #requests_log = logging.getLogger("requests.packages.urllib3")
+                #requests_log.setLevel(logging.DEBUG)
+                #requests_log.propagate = True
+
+                try:
+                    headers   = { 'Cookie': 'sessionID=' + self.sessionid }
+                    with open(filename, 'rb') as f:
+                        params    = {'BlueScalePkg': (os.path.basename(filename), f, 'application/vnd.hp-hps')}
+                        response  = requests.post(url, files=params, headers=headers, verify=False, timeout=10)
+                except Exception as e:
+                    raise(e)
+
             xmldoc    = response.read()
             tree      = xml.etree.ElementTree.fromstring(xmldoc)
 
@@ -285,6 +327,14 @@ class SpectraLogicAPI:
             except Exception as e:
                 raise(e)
 
+        except ConnectionRefusedError as e:
+            print("Connection refused: " + str(e))
+            sys.exit(1)
+        except urllib.error.URLError as e:
+            if str(e.reason) == str('[Errno 111] Connection refused'):
+                print("URL Error: " + str(e))
+                sys.exit(1)
+            raise(e)
         except Exception as e:
             raise(e)
 
@@ -401,6 +451,14 @@ class SpectraLogicAPI:
                 # Return the data as a string
                 return(xmldoc)
 
+        except ConnectionRefusedError as e:
+            print("Connection refused: " + str(e))
+            sys.exit(1)
+        except urllib.error.URLError as e:
+            if str(e.reason) == str('[Errno 111] Connection refused'):
+                print("URL Error: " + str(e))
+                sys.exit(1)
+            raise(e)
         except Exception as e:
             raise(e)
 
@@ -621,104 +679,6 @@ class SpectraLogicAPI:
                            failoverTo, portName, useSoftAddress,
                            loopID, fibreConnectionMode))
                 sys.stdout.flush()
-
-        except Exception as e:
-            raise
-
-
-    #--------------------------------------------------------------------------
-    #
-    # Display the current firmware version installed on individual components
-    # in the library along with the firmware version included in the currently
-    # installed BlueScale package version.
-    #
-    # Note: This action was added with BlueScale12.7.02.
-    #
-    def displaypackagedetails(self):
-
-        headerFormat = '{:35} {:23} {:26}'
-        listFormat = '{:25} {:15} {:15} {:13}'
-
-        # first get the list of packages and find the currently running package
-        try:
-            url  = self.baseurl + "/package.xml?action=list"
-            tree = self.run_command(url)
-            if len(tree) == 0:
-                raise(Exception("Error: No packages exist"))
-            currentPackage = tree.find("current")
-            if len(currentPackage) == 0:
-                raise(Exception("Error: Unable to find currently running package element"))
-            name = currentPackage.find("name")
-            if name is None:
-                raise(Exception("Error: Unable to get the currently running package name"))
-            pgkName = name.text.strip()
-        except Exception as e:
-            print("Problem getting the currently running package name.")
-            raise
-
-        # Use the package name to get the details.  Note: XML documentation
-        # dated June 2017 is missing information about needing the package
-        # argument for the displayPackageDetails action.
-        try:
-            url  = self.baseurl + "/package.xml?action=displayPackageDetails&package=" + pgkName
-            tree = self.run_command(url)
-            print("\nPackage Details")
-            print(  "----------------")
-            if self.longlist:
-                self.long_listing(tree, 0)
-                return
-            if len(tree) == 0:
-                print("None")
-                return
-
-            # top level stuff
-            packageName = tree.find("packageName")
-            allComponentsUpToDate = tree.find("allComponentsUpToDate")
-            allComponentsFullyStaged = tree.find("allComponentsFullyStaged")
-            print()
-            print(headerFormat. \
-                format("PackageName", "AllComponentsUpToDate?",
-                       "AllComponentsFullyStaged?"))
-            print(headerFormat. \
-                format("----------------------------------",
-                       "-----------------------",
-                       "--------------------------"))
-            print(headerFormat. \
-                format(packageName.text.strip(),
-                       allComponentsUpToDate.text.strip(),
-                       allComponentsFullyStaged.text.strip()))
-            sys.stdout.flush()
-            headersPrinted = False
-
-            for pkg in tree:
-                if pkg.tag == "component":
-                    if not headersPrinted:
-                        print()
-                        print(listFormat. \
-                            format("ComponentName", "CurrentVersion",
-                                "PackageVersion", "FullyStaged?"))
-                        print(listFormat. \
-                            format("-------------------------",
-                                   "---------------",
-                                   "---------------",
-                                   "-------------"))
-                        sys.stdout.flush()
-                        headersPrinted = True
-
-                    name = currentVersion = packageVersion = fullyStaged = ""
-                    for component in pkg:
-                        if component.tag == "name":
-                            name = component.text.rstrip()
-                        elif component.tag == "currentVersion":
-                            currentVersion = component.text.rstrip()
-                        elif component.tag == "packageVersion":
-                            packageVersion = component.text.rstrip()
-                        elif component.tag == "fullyStaged":
-                            fullyStaged = component.text.rstrip()
-                    print(listFormat. \
-                        format(name, currentVersion, packageVersion,
-                               fullyStaged))
-                    sys.stdout.flush()
 
         except Exception as e:
             raise
@@ -3334,12 +3294,12 @@ class SpectraLogicAPI:
                 print("Login Failed...\n", file=sys.stderr)
                 self.loggedin  = False
                 self.sessionid = ""
-                self.cookiejar.clear(self.server)
+                self.clear_cookie()
                 os.umask(0o077)
                 self.cookiejar.save(self.cookiefile, ignore_discard=True, ignore_expires=False)
 
         except Exception as e:
-            raise
+            raise(e)
 
 
     #--------------------------------------------------------------------------
@@ -3357,7 +3317,7 @@ class SpectraLogicAPI:
 
         self.loggedin  = False
         self.sessionid = ""
-        self.cookiejar.clear(self.server)
+        self.clear_cookie()
         os.umask(0o077)
         self.cookiejar.save(self.cookiefile, ignore_discard=True, ignore_expires=False)
 
@@ -3519,6 +3479,90 @@ class SpectraLogicAPI:
         except Exception as e:
             raise
 
+    #--------------------------------------------------------------------------
+    #
+    # Display the current firmware version installed on individual components
+    # in the library along with the firmware version included in the currently
+    # installed BlueScale package version.
+    #
+    # Note: This action was added with BlueScale12.7.02.
+    #
+    def packagedisplay(self, packagename):
+
+        headerFormat = '{:35} {:23} {:26}'
+        listFormat = '{:25} {:15} {:15} {:13}'
+
+        # Use the package name to get the details.  Note: XML documentation
+        # dated June 2017 is missing information about needing the package
+        # argument for the displayPackageDetails action.
+        try:
+
+            if packagename is None:
+                raise(Exception("displaypackagedetails: please specify package name"))
+
+            url  = self.baseurl + "/package.xml?action=displayPackageDetails&package=" + packagename
+            tree = self.run_command(url)
+            print("\nPackage Details")
+            print(  "----------------")
+            if self.longlist:
+                self.long_listing(tree, 0)
+                return
+            if len(tree) == 0:
+                print("None")
+                return
+
+            # top level stuff
+            packageName = tree.find("packageName")
+            allComponentsUpToDate = tree.find("allComponentsUpToDate")
+            allComponentsFullyStaged = tree.find("allComponentsFullyStaged")
+            print()
+            print(headerFormat. \
+                format("PackageName", "AllComponentsUpToDate?",
+                       "AllComponentsFullyStaged?"))
+            print(headerFormat. \
+                format("----------------------------------",
+                       "-----------------------",
+                       "--------------------------"))
+            print(headerFormat. \
+                format(packageName.text.strip(),
+                       allComponentsUpToDate.text.strip(),
+                       allComponentsFullyStaged.text.strip()))
+            sys.stdout.flush()
+            headersPrinted = False
+
+            for pkg in tree:
+                if pkg.tag == "component":
+                    if not headersPrinted:
+                        print()
+                        print(listFormat. \
+                            format("ComponentName", "CurrentVersion",
+                                "PackageVersion", "FullyStaged?"))
+                        print(listFormat. \
+                            format("-------------------------",
+                                   "---------------",
+                                   "---------------",
+                                   "-------------"))
+                        sys.stdout.flush()
+                        headersPrinted = True
+
+                    name = currentVersion = packageVersion = fullyStaged = ""
+                    for component in pkg:
+                        if component.tag == "name":
+                            name = component.text.rstrip()
+                        elif component.tag == "currentVersion":
+                            currentVersion = component.text.rstrip()
+                        elif component.tag == "packageVersion":
+                            packageVersion = component.text.rstrip()
+                        elif component.tag == "fullyStaged":
+                            fullyStaged = component.text.rstrip()
+                    print(listFormat. \
+                        format(name, currentVersion, packageVersion,
+                               fullyStaged))
+                    sys.stdout.flush()
+
+        except Exception as e:
+            raise
+
 
     #--------------------------------------------------------------------------
     #
@@ -3549,157 +3593,109 @@ class SpectraLogicAPI:
                     for element in child:
                         if element.tag == "name":
                             print(" " + element.text.rstrip(), end='')
-                    print() #newline
+                    print()
                     sys.stdout.flush()
 
         except Exception as e:
             raise
 
+    def packageprogress(self):
+
+        try:
+
+            url  = self.baseurl + "/package.xml?progress"
+            tree = self.run_command(url)
+
+            # get the immediate response
+            status = "OK"
+            for child in tree:
+                if child.tag == "status":
+                    status = child.text.rstrip()
+                elif child.tag == "message":
+                    message = child.text.rstrip()
+            if status != "OK" and status != "ACTIVE":
+                raise(Exception("Failure issuing progress command: " + message))
+
+            print(message)
+
+        except Exception as e:
+            raise(e)
+
+    def packagestage(self, packagename):
+
+        try:
+            if (packagename is None):
+                raise(Exception("packagestage: please provide a package name."))
+
+            url  = self.baseurl + "/package.xml?action=stagePackage&package=" + packagename
+            tree = self.run_command(url)
+
+            # get the immediate response
+            status = "OK"
+            for child in tree:
+                if child.tag == "status":
+                    status = child.text.rstrip()
+                elif child.tag == "message":
+                    message = child.text.rstrip()
+            if status != "OK":
+                raise(Exception("Failure issuing stagePackage command: " + message))
+
+            print(message)
+
+        except Exception as e:
+            raise(e)
 
     #--------------------------------------------------------------------------
     #
     # The command performs multiple XML commands to update the library BlueScale
     # software.
     #
-    def packageupdate(self, filename):
+    def packageupdate(self, packagename):
+
+        # First transfer the BlueScale package to the library using the
+        # packageupload command.
+        try:
+            if (packagename is None):
+                raise(Exception("packageupdate: please provide a package name."))
+
+            url  = self.baseurl + "/package.xml?action=update&package=" + packagename + "&autoFinish"
+            tree = self.run_command(url)
+
+            # get the immediate response
+            status = "OK"
+            for child in tree:
+                if child.tag == "status":
+                    status = child.text.rstrip()
+                elif child.tag == "message":
+                    message = child.text.rstrip()
+            if status != "OK":
+                raise(Exception("Failure issuing update command: " + message))
+
+            print(message)
+
+        except Exception as e:
+            raise
+
+    #--------------------------------------------------------------------------
+    #
+    # The command performs multiple XML commands to update the library BlueScale
+    # software.
+    #
+    def packageupload(self, filename):
 
         # First transfer the BlueScale package to the library using the
         # package_upload command.
         try:
-            #self.package_upload(filename)
-            print("Upload of package '" + filename + \
-                  "' to the library's memory card complete")
-        except Exception as e:
-            raise
+            filename = os.path.abspath(filename)
+            if os.path.exists(filename) == False:
+                raise(Exception(filename + " does not exist."))
+            if os.path.isfile(filename) == False:
+                raise(Exception(filename + " is not a file."))
+            if not filename.endswith(".hps"):
+                raise(Exception(filename + " is not a valid .hps file."))
 
-        # Next verify that package we uploaded is listed in the list section of
-        # the XML data returned in the package.xml response.
-        try:
-            url  = self.baseurl + "/package.xml?action=list"
-            tree = self.run_command(url)
-
-            if (len(tree) == 0):
-                raise(Exception("Failure: Can't find any packages."))
-
-            listList = tree.findall("list")
-            if len(listList) == 0:
-                raise(Exception("Failure: Can't find any packages stored on the Library."))
-
-            found = False
-            for listItem in tree.iter('list'):
-                for name in listItem.iter('name'):
-                    if (name.text.rstrip() == filename):
-                        found = True
-                        break
-                if (found):
-                    break
-
-            if not found:
-                msg = "Failure: Can't find package '" + filename + "' in the " \
-                      "library's memory card. The package failed upload."
-                raise(Exception(msg))
-
-        except Exception as e:
-            raise
-
-        # Next update the library to use the BlueScale package we uploaded and
-        # automatically reboot the LCM if the package included updates to the
-        # LCM or RCM firmware.
-        try:
-            print("Updating library to use package '" + filename + "'...", end='')
-            sys.stdout.flush()
-
-            url  = self.baseurl + "/package.xml?action=update&package=" +      \
-                   filename + "&autofinish"
-            #tree = self.run_command(url)
-
-            # get the immediate response
-            status = "OK"
-            for child in tree:
-                if child.tag == "status":
-                    status = child.text.rstrip()
-                elif child.tag == "message":
-                    message = child.text.rstrip()
-            if status != "OK":
-                raise(Exception("Failure issuing package update command : " +  \
-                                message))
-
-            # poll for package update to be done
-            # ToDo: This code will probably have problems if/when the LCM
-            #       reboots. The remote connection to the library is lost when
-            #       the LCM reboots. Need to allow sufficient time for the LCM
-            #       to complete its initialization, then reconnect to the
-            #       library. How can I tell??
-            try:
-                while (not self.check_command_progress("package", False)):
-                    # put out an in progress 'dot'
-                    print(".", end='')
-                    sys.stdout.flush()
-                    # wait 1 seconds before retrying
-                    time.sleep(1)
-            except Exception as e:
-                raise(Exception("package update progress Error: " + str(e),
-                                file=sys.stderr))
-        except Exception as e:
-            raise
-
-        # ToDo:
-        # - Retrieve any system messages posted during the update process
-        #   - If the update did not require a reboot of the LCM, use:
-        #        systemMessages.xml
-        #   - If the update required a reboot of the LCM, use:
-        #        traces.xml?traceType=Message
-
-        # Confirm that the library is using the BlueScale package we just
-        # uploaded. The package we used for the update should be listed in
-        # the current section of the XML data returned in the command
-        # response.
-        try:
-            url  = self.baseurl + "/package.xml?action=list"
-            tree = self.run_command(url)
-
-            if (len(tree) == 0):
-                raise(Exception("Failure: Can't find any packages."))
-
-            listList = tree.findall("current")
-            if len(listList) == 0:
-                raise(Exception("Failure: Can't find any current packages on the Library."))
-
-            found = False
-            for listItem in tree.iter('current'):
-                for name in listItem.iter('name'):
-                    if (name.text.rstrip() == filename):
-                        found = True
-                        break
-                if (found):
-                    break
-
-            if not found:
-                msg = "Failure: Package '" + filename + "' is not currently "  \
-                      "running."
-                raise(Exception(msg))
-
-        except Exception as e:
-            raise
-
-        print("\nThe library has been successfully updated to '" + filename +  \
-              "'.")
-        sys.stdout.flush()
-
-
-    #--------------------------------------------------------------------------
-    #
-    # Wraps the "packageUpload.xml" command which is used as one of the steps to
-    # update the BlueScale Software and Library Firmware. This particular step
-    # will upload a BlueScale package file (filename) to the library's memory
-    # card.
-    #
-    def package_upload(self, filename):
-
-        # ToDo: need to send the filename using HTTP POST
-        try:
             url  = self.baseurl + "/packageUpload.xml"
-            tree = self.run_command(url)
+            tree = self.run_command(url, filename)
 
             # get the immediate response
             status = "OK"
@@ -3709,12 +3705,12 @@ class SpectraLogicAPI:
                 elif child.tag == "message":
                     message = child.text.rstrip()
             if status != "OK":
-                raise(Exception("Failure issuing packageUpdate command : " +  \
-                                message))
+                raise(Exception("Failure issuing packageUpload command : " + message))
+
+            print(message)
 
         except Exception as e:
             raise
-
 
     #--------------------------------------------------------------------------
     #
@@ -4505,8 +4501,7 @@ def main():
                            help='Talk to library over http:// instead of https://')
 
     cmdparser.add_argument('--config', '-c', dest='configfile', nargs='?',
-                           required=True,
-                           type=argparse.FileType('r'), default='/etc/slapi.cfg',
+                           type=argparse.FileType('r'), default='/etc/slapi.conf',
                            help='Configuration file for Spectra Logic API..')
 
     cmdparser.add_argument('--server', '-s', dest='server',
@@ -4525,11 +4520,6 @@ def main():
     controllerslist_parser = cmdsubparsers.add_parser('controllerslist',
         help='Returns controller status, type, firmware, and failover and     \
               port information.')
-
-    displaypackagedetails_parser = cmdsubparsers.add_parser('displaypackagedetails',
-        help='Display the current firmware version installed on individual    \
-              components in the library along with the firmware version       \
-              included in the currently installed BlueScale package version.')
 
     drivelist_parser = cmdsubparsers.add_parser('drivelist',
         help='Returns detailed information about each of the drives in the    \
@@ -4675,6 +4665,21 @@ def main():
     packageupdate_parser.add_argument('filename', action='store',
         help='BlueScale Software and Library Firmware package file')
 
+    package_parser = cmdsubparsers.add_parser('package',
+        help='package command help.')
+    package_subparser       = package_parser.add_subparsers(title="subcommands", dest="subcommand")
+    package_list_parser     = package_subparser.add_parser('list', help='Retrieves the name of the BlueScale packages ' +
+                                                                   'stored on the memory card in the LCM')
+    package_display_parser  = package_subparser.add_parser('display', help='Display details for the specified package')
+    package_display_parser.add_argument('packagename', action='store', help='Name of the package to display')
+    package_progress_parser = package_subparser.add_parser('progress', help='Update the library to the specified package')
+    package_stage_parser    = package_subparser.add_parser('stage', help='Stage the specified package for update')
+    package_stage_parser.add_argument('packagename', action='store', help='Name of the package to stage')
+    package_update_parser   = package_subparser.add_parser('update', help='Update the library to the specified package')
+    package_update_parser.add_argument('packagename', action='store', help='Name of the package to update the library to')
+    package_upload_parser   = package_subparser.add_parser('upload', help='Upload the package file to the memory card on the LCM')
+    package_upload_parser.add_argument('filename', action='store', help='BlueScale Software and Library Firmware package file')
+
     partitionlist_parser = cmdsubparsers.add_parser('partitionlist',
         help='List all Spectra Logic Library partitions.')
 
@@ -4737,20 +4742,47 @@ def main():
 
     args = cmdparser.parse_args()
 
-    cfgparser = configparser.ConfigParser()
-    cfgparser.read(args.configfile.name)
-    try:
-        config = cfgparser[args.server]
-    except Exception as e:
-        config = cfgparser["DEFAULT"]
+    if args.configfile is not None and args.configfile.name is not None:
+
+        if args.configfile.name == "":
+            raise(Exception("Error: CONFIGFILE not specified"))
+
+        cfgparser = configparser.ConfigParser()
+        cfgparser.read(args.configfile.name)
+
+        try:
+            config = cfgparser[args.server]
+        except Exception as e:
+            config = cfgparser["DEFAULT"]
+
+        try:
+            if args.user is None:
+                if config.get("username"):
+                    args.user   = config["username"]
+            if args.passwd is None:
+                if config.get("password"):
+                    args.passwd = config["password"]
+            if args.insecure is None or args.insecure == False:
+                if config.get("insecure"):
+                    args.insecure = config["insecure"]
+            if args.verbose is None or args.verbose == False:
+                if config.get("verbose"):
+                    args.verbose = config["verbose"]
+
+        except Exception as e:
+            print(str(e))
+            cmdparser.print_help()
+            sys.exit(1)
 
     try:
-        if args.user is None:
-           args.user   = config["username"]
-        if args.passwd is None:
-            args.passwd = config["password"]
+        if args.server is None or args.server == "":
+            raise(Exception("Error: SERVER not specified"))
+        if args.user is None or args.user == "":
+            raise(Exception("Error: USER not specified"))
+        if args.passwd is None or args.passwd == "":
+            raise(Exception("Error: PASSWD not specified"))
     except Exception as e:
-        cmdparser.print_help()
+        print(str(e))
         sys.exit(1)
 
     slapi = SpectraLogicAPI(args)
@@ -4761,8 +4793,6 @@ def main():
             sys.exit(1)
         elif args.command == "controllerslist":
             slapi.controllerslist()
-        elif args.command == "displaypackagedetails":
-            slapi.displaypackagedetails()
         elif args.command == "drivelist":
             slapi.drivelist()
         elif args.command == "etherlibrefresh":
@@ -4815,10 +4845,21 @@ def main():
             slapi.librarystatus2()
         elif args.command == "mlmsettings":
             slapi.mlmsettings()
-        elif args.command == "packagelist":
-            slapi.packagelist()
-        elif args.command == "packageupdate":
-            slapi.packageupdate(args.filename)
+        elif args.command == "package":
+            if args.subcommand is None or args.subcommand == "list":
+                slapi.packagelist()
+            elif args.subcommand == "display":
+                slapi.packagedisplay(args.packagename)
+            elif args.subcommand == "progress":
+                slapi.packageprogress()
+            elif args.subcommand == "update":
+                slapi.packageupdate(args.packagename)
+            elif args.subcommand == "upload":
+                slapi.packageupload(args.filename)
+            elif args.subcommand == "stage":
+                slapi.packagestage(args.packagename)
+            else:
+                raise(Exception("package: Unknown option " + option))
         elif args.command == "partitionlist":
             slapi.partitionlist()
         elif args.command == "physinventorylist":
@@ -4841,9 +4882,12 @@ def main():
             cmdparser.print_help()
             sys.exit(1)
     except Exception as e:
-        print("Command '" + args.command + "': " + str(e), file=sys.stderr)
-        if (args.verbose):
-            traceback.print_exc()
+        fullcmd = args.command
+        if args.subcommand is not None:
+            fullcommand = args.command + " " + args.subcommand
+        print("Command '" + fullcommand + "': " + str(e), file=sys.stderr)
+        #if (args.verbose):
+            #traceback.print_exc()
         sys.exit(1)
 
 if __name__ == "__main__":

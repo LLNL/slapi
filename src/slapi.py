@@ -275,7 +275,8 @@ class SpectraLogicAPI:
                 opener    = urllib.request.build_opener(urllib.request.HTTPSHandler(context=context), urllib.request.HTTPCookieProcessor(self.cookiejar))
                 opener.addheaders.append(("Cookie", "sessionID=" + self.sessionid))
                 request   = urllib.request.Request(url)
-                response  = opener.open(request, timeout=10)
+                response  = opener.open(request)
+                xmldoc    = response.read()
             else:
                 requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
                 requests.packages.urllib3.util.ssl_.DEFAULT_CIPHERS = cipherstr
@@ -291,11 +292,11 @@ class SpectraLogicAPI:
                     headers   = { 'Cookie': 'sessionID=' + self.sessionid }
                     with open(filename, 'rb') as f:
                         params    = {'BlueScalePkg': (os.path.basename(filename), f, 'application/vnd.hp-hps')}
-                        response  = requests.post(url, files=params, headers=headers, verify=False, timeout=10)
+                        response  = requests.post(url, files=params, headers=headers, verify=False, allow_redirects=True)
+                        xmldoc    = response.text
                 except Exception as e:
                     raise(e)
 
-            xmldoc    = response.read()
             tree      = xml.etree.ElementTree.fromstring(xmldoc)
 
             # Pretty print the XML document if verbose on
@@ -3702,12 +3703,10 @@ class SpectraLogicAPI:
             for child in tree:
                 if child.tag == "status":
                     status = child.text.rstrip()
-                elif child.tag == "message":
-                    message = child.text.rstrip()
             if status != "OK":
-                raise(Exception("Failure issuing packageUpload command : " + message))
+                raise(Exception("Failure issuing packageUpload command"))
 
-            print(message)
+            print("Successfully uploaded package: " + os.path.basename(filename))
 
         except Exception as e:
             raise

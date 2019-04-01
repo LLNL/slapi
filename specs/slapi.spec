@@ -25,6 +25,7 @@ umask 002
 
 # Only do the make if this is not a snapshot build
 %if %{?snapshot:0}%{!?snapshot:1}
+cd src
 sh ./autogen.sh
 %configure
 make -s

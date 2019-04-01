@@ -15,7 +15,7 @@ Requires:      python34-requests
 %define hpss_prefix /hpss
 
 %description
-This is a tool that talks to the Spectra Logic libraries using their XML API.
+This is a tool that talks to the Spectra Logic tape libraries using their XML API.
 
 %prep
 %setup -q
@@ -25,7 +25,9 @@ umask 002
 
 # Only do the make if this is not a snapshot build
 %if %{?snapshot:0}%{!?snapshot:1}
-make -S
+sh ./autogen.sh
+%configure
+make -s
 %endif
 
 %install
@@ -35,14 +37,13 @@ mkdir -p ${RPM_BUILD_ROOT}%{_bindir}
 mkdir -p ${RPM_BUILD_ROOT}%{_sbindir}
 mkdir -p ${RPM_BUILD_ROOT}%{_libdir}
 mkdir -p ${RPM_BUILD_ROOT}%{_includedir}
+
+# AIX make does not like -C so actually
+# change into this directory here.
+cd src || exit -1
+DESTDIR="${RPM_BUILD_ROOT}" make install
+cd .. || exit -1
  
-# Install products for rpms
-cp -p -R -L src/slapi.py                             ${RPM_BUILD_ROOT}%{_bindir}/slapi
-
-# Properly set permissions
-find ${RPM_BUILD_ROOT}              -type d | xargs chmod 0755
-find ${RPM_BUILD_ROOT}              -type f | xargs chmod +X,u+rw,g+r,g-w,o+r,o-w,-s
-
 %clean
 [ "${RPM_BUILD_ROOT}" != "/" ] && rm -rf ${RPM_BUILD_ROOT}
 

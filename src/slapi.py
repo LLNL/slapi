@@ -4486,7 +4486,7 @@ def main():
     cmdparser     = argparse.ArgumentParser(description='Spectra Logic TFinity API Tool.')
     cmdsubparsers = cmdparser.add_subparsers(title="commands", dest="command")
 
-    cmdparser.add_argument('--version', '-V', action='version', version='%(prog)s 1.0')
+    cmdparser.add_argument('--version', '-V', action='version', version='%(prog)s @VERSION@')
 
     cmdparser.add_argument('--verbose', '-v', dest='verbose', action='store_true',
                            help='Increase the verbosity for the output.')

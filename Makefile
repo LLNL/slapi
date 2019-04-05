@@ -6,7 +6,7 @@ PACKAGENAME = slapi
 PACKAGEVERSION := $(shell cat VERSION)
 PACKAGERELEASE := $(shell cat RELEASE)
 BUILDSOURCE = --buildsource
-URL = ssh://git@cz-bitbucket.llnl.gov:7999/dsg/$(PACKAGENAME).git
+URL = ssh://git@github.com:LLNL/$(PACKAGENAME).git
 
 all: $(PACKAGENAME)
 

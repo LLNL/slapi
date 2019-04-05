@@ -2,7 +2,7 @@ Name:
 Version:
 Release:
 Summary:       Utility that talks to Spectra Logic libraries.
-License:       LLNL
+License:       GPLv2+
 Group:         System Environment/Base
 Source:        %{name}-%{version}.tar
 BuildRoot:     %{_tmppath}/%{name}-%{version}-%{release}-root
@@ -12,7 +12,6 @@ Requires:      python34-requests
 
 %define __spec_install_post /usr/lib/rpm/brp-compress || :
 %define debug_package %{nil}
-%define hpss_prefix /hpss
 
 %description
 This is a tool that talks to the Spectra Logic tape libraries using their XML API.
@@ -50,6 +49,12 @@ cd .. || exit -1
 
 %files
 %defattr(-,root,root,0755)
+%dir %{_datadir}/doc/%{name}
+%doc %{_datadir}/doc/%{name}/AUTHORS
+%doc %{_datadir}/doc/%{name}/COPYING
+%doc %{_datadir}/doc/%{name}/INSTALL
+%doc %{_datadir}/doc/%{name}/NEWS
+%doc %{_datadir}/doc/%{name}/README
 %{_bindir}/slapi
 
 %changelog

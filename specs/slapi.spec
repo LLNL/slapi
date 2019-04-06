@@ -56,6 +56,7 @@ cd .. || exit -1
 %doc %{_datadir}/doc/%{name}/INSTALL
 %doc %{_datadir}/doc/%{name}/NEWS
 %doc %{_datadir}/doc/%{name}/README
+%doc %{_datadir}/doc/%{name}/README.md
 %{_bindir}/slapi
 
 %changelog

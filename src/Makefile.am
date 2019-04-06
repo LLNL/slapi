@@ -6,7 +6,8 @@ EXTRA = \
         COPYING \
         INSTALL \
         NEWS \
-        README
+        README \
+        README.md
 
 doc_DATA = $(EXTRA)
 

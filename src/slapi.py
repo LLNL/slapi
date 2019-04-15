@@ -40,6 +40,11 @@ class SpectraLogicLoginError(Exception):
     def __init__(self, *args, **kwargs):
         Exception.__init__(self, *args, **kwargs)
 
+class IncompatibleParameterError(Exception):
+
+    def __init__(self, *args, **kwargs):
+        Exception.__init__(self, *args, **kwargs)
+
 class SpectraLogicAPI:
 
     #--------------------------------------------------------------------------
@@ -222,9 +227,13 @@ class SpectraLogicAPI:
     #--------------------------------------------------------------------------
     #
     # Runs the XML command
-    # Returns an XML element tree
+	# Return either an XML element tree by default, or the data as a string if
+	# the returnstring parameter is set to True.
     #
-    def run_command(self, url, filename = None):
+    def run_command(self, url, filename=None, returnstring=False):
+
+        if filename is not None and returnstring is not False:
+            raise(IncompatibleParameterError("Error: The filename and the returnstring cannot both be specified."))
 
         try:
 
@@ -313,15 +322,38 @@ class SpectraLogicAPI:
                 except Exception as e:
                     raise(e)
 
-            tree      = xml.etree.ElementTree.fromstring(xmldoc)
+            # If we got an error from running the command, then we will be able
+            # to successfully put into a tree and check for error records.
+            checkerror = True
+            if returnstring:
+                checkerror = False
 
-            # Pretty print the XML document if verbose on
-            self.print_xml_document(xmldoc)
+            try:
+                tree       = xml.etree.ElementTree.fromstring(xmldoc)
+                checkerror = True
+
+                # Pretty print the XML document if verbose on
+                self.print_xml_document(xmldoc)
+
+            except Exception as e:
+
+                if returnstring:
+                    # It's okay if we couldn't turn the xmldoc into a tree; means
+                    # we've got some good binary data
+                    checkerror = False
+                else:
+                    raise(e)
 
             # check_for_error will raise an exception if it encounters a problem
             try:
-                self.check_for_error(tree)
-                return(tree)
+                if checkerror:
+                    self.check_for_error(tree)
+
+                if returnstring:
+                    return(xmldoc)
+                else:
+                    return(tree)
+
             except SpectraLogicLoginError as e:
                 try:
                     if (self.verbose):
@@ -329,14 +361,16 @@ class SpectraLogicAPI:
                             str(SpectraLogicLoginError.LoginErrorRaised),
                             file=sys.stderr)
 
+                    # If we haven't already had a login error, then login
+                    # and retry the command
                     if SpectraLogicLoginError.LoginErrorRaised == False:
                         SpectraLogicLoginError.LoginErrorRaised = True
                         if (self.verbose):
-                            print("Re-issuing login")
+                            print("Re-issuing login", file=sys.stderr)
                         self.login()
                         if (self.verbose):
-                            print("Re-running command")
-                        return(self.run_command(url))
+                            print("Re-running command", file=sys.stderr)
+                        return(self.run_command(url, filename, returnstring))
                     else:
                         raise(e)
                 except Exception as e:
@@ -345,140 +379,15 @@ class SpectraLogicAPI:
                 raise(e)
 
         except ConnectionRefusedError as e:
-            print("Connection refused: " + str(e))
+            print("Connection refused: " + str(e), file=sys.stderr)
             sys.exit(1)
         except urllib.error.URLError as e:
             if str(e.reason) == str('[Errno 111] Connection refused'):
-                print("URL Error: " + str(e))
+                print("URL Error: " + str(e), file=sys.stderr)
                 sys.exit(1)
             raise(e)
         except Exception as e:
             raise(e)
-
-    #--------------------------------------------------------------------------
-    #
-    # Runs the XML command
-    # Returns the data as a string
-    #
-    def run_command_string(self, url):
-
-        try:
-
-            if self.verbose:
-                print("--------------------------------------------------", file=sys.stderr)
-                print("Command: " + url, file=sys.stderr)
-                print("--------------------------------------------------", file=sys.stderr)
-                print("", file=sys.stderr)
-
-            # FIXME someday...
-            #
-            # The libraries currently use self-signed certs Do not verify the
-            # certificate for now...  Also use medium encryption cipher suite
-            # At come point we should be able to completely get rid of the code
-            # for setting the cipher.
-            #
-            # Explanations for the cipher names
-            #
-            # HIGH
-            #
-            # "High" encryption cipher suites. This currently means those with
-            # key lengths larger than 128 bits, and some cipher suites with
-            # 128-bit keys.
-            #
-            # MEDIUM
-            #
-            # "Medium" encryption cipher suites, currently some of those using
-            # 128 bit encryption.
-            #
-            # LOW
-            #
-            # "Low" encryption cipher suites, currently those using 64 or 56
-            # bit encryption algorithms but excluding export cipher suites. All
-            # these cipher suites have been removed as of OpenSSL 1.1.0.
-            #
-            # eNULL, NULL
-            #
-            # The "NULL" ciphers that is those offering no encryption. Because
-            # these offer no encryption at all and are a security risk they are
-            # not enabled via either the DEFAULT or ALL cipher strings. Be
-            # careful when building cipherlists out of lower-level primitives
-            # such as kRSA or aECDSA as these do overlap with the eNULL
-            # ciphers. When in doubt, include !eNULL in your cipherlist.
-            #
-            # aNULL
-            #
-            # The cipher suites offering no authentication. This is currently
-            # the anonymous DH algorithms and anonymous ECDH algorithms. These
-            # cipher suites are vulnerable to "man in the middle" attacks and
-            # so their use is discouraged. These are excluded from the DEFAULT
-            # ciphers, but included in the ALL ciphers. Be careful when
-            # building cipherlists out of lower-level primitives such as kDHE
-            # or AES as these do overlap with the aNULL ciphers. When in doubt,
-            # include !aNULL in your cipherlist.
-
-            context = ssl._create_unverified_context()
-            #context.set_ciphers('HIGH:!aNULL:!eNULL')
-            context.set_ciphers('MEDIUM:!aNULL:!eNULL')
-
-            opener    = urllib.request.build_opener(urllib.request.HTTPSHandler(context=context), urllib.request.HTTPCookieProcessor(self.cookiejar))
-            opener.addheaders.append(("Cookie", "sessionID=" + self.sessionid))
-            request   = urllib.request.Request(url)
-            response  = opener.open(request)
-            xmldoc    = response.read()
-
-            # If we got an error from running the command, then we will be able
-            # to successfully put into a tree and check for error records.
-            checkerror = False
-            try:
-                tree = xml.etree.ElementTree.fromstring(xmldoc)
-                checkerror = True
-
-                # Pretty print the XML document if verbose on
-                self.print_xml_document(xmldoc)
-
-            except Exception as e:
-                # It's okay if we couldn't turn the xmldoc into a tree; means
-                # we've got some good binary data
-                checkerror = False
-
-            if checkerror:
-                try:
-                    self.check_for_error(tree)
-                except SpectraLogicLoginError as e:
-                    try:
-                        if (self.verbose):
-                            print("Loginerror: Raised: " +
-                                str(SpectraLogicLoginError.LoginErrorRaised),
-                                file=sys.stderr)
-
-                        # If we haven't already had a login error, then login
-                        # and retry the command
-                        if SpectraLogicLoginError.LoginErrorRaised == False:
-                            SpectraLogicLoginError.LoginErrorRaised = True
-                            self.login()
-                            return(self.run_command_string(url))
-                        else:
-                            raise(e)
-                    except Exception as e:
-                        raise(e)
-                except Exception as e:
-                    raise(e)
-
-            else:
-                # Return the data as a string
-                return(xmldoc)
-
-        except ConnectionRefusedError as e:
-            print("Connection refused: " + str(e))
-            sys.exit(1)
-        except urllib.error.URLError as e:
-            if str(e.reason) == str('[Errno 111] Connection refused'):
-                print("URL Error: " + str(e))
-                sys.exit(1)
-            raise(e)
-        except Exception as e:
-            raise(e)
-
 
     #==========================================================================
     # DEFINE COMMAND FUNCTIONS
@@ -515,7 +424,7 @@ class SpectraLogicAPI:
             if firstTime:
                 print()     # newline
         except Exception as e:
-            raise
+            raise(e)
 
         # audit the tera pack / magazine
         try:
@@ -549,7 +458,7 @@ class SpectraLogicAPI:
                 raise(Exception("inventory audit progress Error: " + str(e),
                                 file=sys.stderr))
         except Exception as e:
-            raise
+            raise(e)
 
 
     #--------------------------------------------------------------------------
@@ -587,7 +496,7 @@ class SpectraLogicAPI:
             if (self.verbose):
                 print("check_command_progress Error: " + str(e), file=sys.stderr)
                 traceback.print_exc()
-            raise
+            raise(e)
 
 
     #--------------------------------------------------------------------------
@@ -629,7 +538,7 @@ class SpectraLogicAPI:
             if (self.verbose):
                 print("check_for_error Error: " + str(e), file=sys.stderr)
                 traceback.print_exc()
-            raise
+            raise(e)
 
         return(False)
 
@@ -698,7 +607,7 @@ class SpectraLogicAPI:
                 sys.stdout.flush()
 
         except Exception as e:
-            raise
+            raise(e)
 
 
     #--------------------------------------------------------------------------
@@ -824,7 +733,7 @@ class SpectraLogicAPI:
                 sys.stdout.flush()
 
         except Exception as e:
-            raise
+            raise(e)
 
 
     #--------------------------------------------------------------------------
@@ -870,7 +779,7 @@ class SpectraLogicAPI:
             sys.stdout.flush()
 
         except Exception as e:
-            raise
+            raise(e)
 
 
     #--------------------------------------------------------------------------
@@ -911,7 +820,7 @@ class SpectraLogicAPI:
                 sys.stdout.flush()
 
         except Exception as e:
-            raise
+            raise(e)
 
 
     #--------------------------------------------------------------------------
@@ -955,7 +864,7 @@ class SpectraLogicAPI:
             sys.stdout.flush()
 
         except Exception as e:
-            raise
+            raise(e)
 
 
     #--------------------------------------------------------------------------
@@ -1024,7 +933,7 @@ class SpectraLogicAPI:
             sys.stdout.flush()
 
         except Exception as e:
-            raise
+            raise(e)
 
 
     #--------------------------------------------------------------------------
@@ -1040,7 +949,7 @@ class SpectraLogicAPI:
             url  = self.baseurl + "/autosupport.xml?action=getASL&name=" + urllib.parse.quote(filename)
 
             # Call the run command wrapper that returns a string
-            xmldoc = self.run_command_string(url)
+            xmldoc = self.run_command(url, returnstring=True)
 
             # Write the data to a file in the current working directory.
             # The name of the file is the same as the ASL name except:
@@ -1055,7 +964,7 @@ class SpectraLogicAPI:
             sys.stdout.flush()
 
         except Exception as e:
-            raise
+            raise(e)
 
 
     #--------------------------------------------------------------------------
@@ -1085,7 +994,7 @@ class SpectraLogicAPI:
                         sys.stdout.flush()
 
         except Exception as e:
-            raise
+            raise(e)
 
 
     #--------------------------------------------------------------------------
@@ -1116,7 +1025,7 @@ class SpectraLogicAPI:
             if firstTime:
                 print()     # newline
         except Exception as e:
-            raise
+            raise(e)
 
         # Get the audit results
         try:
@@ -1288,7 +1197,7 @@ class SpectraLogicAPI:
             #          "expected " + str(numSlots) + " items.")
 
         except Exception as e:
-            raise
+            raise(e)
 
 
     #--------------------------------------------------------------------------
@@ -1311,7 +1220,7 @@ class SpectraLogicAPI:
             url  = self.baseurl + "/traces.xml?action=getCanLog&name=" + filename
 
             # Call the run command wrapper that returns a string
-            xmldoc = self.run_command_string(url)
+            xmldoc = self.run_command(url, returnstring=True)
 
             # Write the data to a file in the current working directory.
             # The name of the file is the same as the motion log name
@@ -1323,7 +1232,7 @@ class SpectraLogicAPI:
             sys.stdout.flush()
 
         except Exception as e:
-            raise
+            raise(e)
 
 
     #--------------------------------------------------------------------------
@@ -1360,7 +1269,7 @@ class SpectraLogicAPI:
                         sys.stdout.flush()
 
         except Exception as e:
-            raise
+            raise(e)
 
 
     #--------------------------------------------------------------------------
@@ -1395,7 +1304,7 @@ class SpectraLogicAPI:
             url  = self.baseurl + "/driveList.xml?action=getDriveTraces&driveTracesGetType=download"
 
             # Call the run command wrapper that returns a string
-            xmldoc = self.run_command_string(url)
+            xmldoc = self.run_command(url, returnstring=True)
 
             # Write the data to a file in the current working directory.
             f = open('drivetraces.zip', 'wb')
@@ -1406,7 +1315,7 @@ class SpectraLogicAPI:
             sys.stdout.flush()
 
         except Exception as e:
-            raise
+            raise(e)
 
 
     #--------------------------------------------------------------------------
@@ -1429,7 +1338,7 @@ class SpectraLogicAPI:
             url  = self.baseurl + "/traces.xml?action=getKernelLog&name=" + filename
 
             # Call the run command wrapper that returns a string
-            xmldoc = self.run_command_string(url)
+            xmldoc = self.run_command(url, returnstring=True)
 
             # Write the data to a file in the current working directory.
             # The name of the file is the same as the motion log name
@@ -1441,7 +1350,7 @@ class SpectraLogicAPI:
             sys.stdout.flush()
 
         except Exception as e:
-            raise
+            raise(e)
 
 
     #--------------------------------------------------------------------------
@@ -1478,7 +1387,7 @@ class SpectraLogicAPI:
                         sys.stdout.flush()
 
         except Exception as e:
-            raise
+            raise(e)
 
 
     #--------------------------------------------------------------------------
@@ -1556,7 +1465,7 @@ class SpectraLogicAPI:
                 print()
         except Exception as e:
             print("traces progress Error: " + str(e), file=sys.stderr)
-            raise
+            raise(e)
 
 
         # getFullMotionLogNames
@@ -1594,7 +1503,7 @@ class SpectraLogicAPI:
         except Exception as e:
             print("getFullMotionLogNames Error: " + str(e), file=sys.stderr)
             sys.stdout.flush()
-            raise
+            raise(e)
 
 
         # gatherFullMotionLog
@@ -1609,7 +1518,7 @@ class SpectraLogicAPI:
         except Exception as e:
             print("gatherFullMotionLog Error: " + str(e), file=sys.stderr)
             sys.stdout.flush()
-            raise
+            raise(e)
 
 
         # poll for gatherFullMotionLog to be done
@@ -1625,7 +1534,7 @@ class SpectraLogicAPI:
         except Exception as e:
             print("traces gatherFullMotionLog progress Error: " + str(e), file=sys.stderr)
             sys.stdout.flush()
-            raise
+            raise(e)
 
 
         # getFullMotionLog
@@ -1635,7 +1544,7 @@ class SpectraLogicAPI:
             url  = self.baseurl + "/traces.xml?action=getFullMotionLog&name=" + filename
 
             # Call the run command wrapper that returns a string
-            xmldoc = self.run_command_string(url)
+            xmldoc = self.run_command(url, returnstring=True)
 
             # Write the data to a file in the current working directory.
             # The name of the file is the same as the motion log name
@@ -1649,7 +1558,7 @@ class SpectraLogicAPI:
         except Exception as e:
             print("getmotionlogfile Error: " + str(e), file=sys.stderr)
             sys.stdout.flush()
-            raise
+            raise(e)
 
 
     #--------------------------------------------------------------------------
@@ -1697,7 +1606,7 @@ class SpectraLogicAPI:
                             sys.stdout.flush()
 
         except Exception as e:
-            raise
+            raise(e)
 
 
     #--------------------------------------------------------------------------
@@ -1721,7 +1630,7 @@ class SpectraLogicAPI:
             url  = self.baseurl + "/traces.xml?action=getQIPLog&name=" + filename
 
             # Call the run command wrapper that returns a string
-            xmldoc = self.run_command_string(url)
+            xmldoc = self.run_command(url, returnstring=True)
 
             # Write the data to a file in the current working directory.
             # The name of the file is the same as the QIP log name
@@ -1771,7 +1680,7 @@ class SpectraLogicAPI:
                         sys.stdout.flush()
 
         except Exception as e:
-            raise
+            raise(e)
 
 
     #--------------------------------------------------------------------------
@@ -1904,7 +1813,7 @@ class SpectraLogicAPI:
             url  = self.baseurl + "/traces.xml?traceType=" + choice
 
             # Call the run command wrapper that returns a string
-            xmldoc = self.run_command_string(url)
+            xmldoc = self.run_command(url, returnstring=True)
 
             # Write the data to a file in the current working directory.
             # The name of the file is the same as the trace type with an
@@ -1933,7 +1842,7 @@ class SpectraLogicAPI:
             print("gettrace (" + choice + ") Error: " + str(e),
                   file=sys.stderr)
             sys.stdout.flush()
-            raise
+            raise(e)
 
 
     #--------------------------------------------------------------------------
@@ -2004,7 +1913,7 @@ class SpectraLogicAPI:
                             sys.stdout.flush()
 
         except Exception as e:
-            raise
+            raise(e)
 
 
     #--------------------------------------------------------------------------
@@ -2039,7 +1948,7 @@ class SpectraLogicAPI:
             url  = self.baseurl + "/partitionList.xml"
             partitionTree = self.run_command(url)
         except Exception as e:
-            raise
+            raise(e)
 
         if len(partitionTree) == 0:
             raise(Exception("Error: paritionList is reporting 0 paritions"))
@@ -2048,7 +1957,7 @@ class SpectraLogicAPI:
         try:
             self.verifymagazinebarcodes()
         except Exception as e:
-            raise
+            raise(e)
 
         # Wait a few more minutes before issuing the partition command
         # Testing has shown problems with issuing the physInventory too soon
@@ -2119,7 +2028,7 @@ class SpectraLogicAPI:
 
 
         except Exception as e:
-            raise
+            raise(e)
 
 
     #--------------------------------------------------------------------------
@@ -2176,7 +2085,7 @@ class SpectraLogicAPI:
                         sys.stdout.flush()
 
         except Exception as e:
-            raise
+            raise(e)
 
 
     #--------------------------------------------------------------------------
@@ -2316,7 +2225,7 @@ class SpectraLogicAPI:
                                        trapDescription, trapIPAddress))
 
         except Exception as e:
-            raise
+            raise(e)
 
 
     #--------------------------------------------------------------------------
@@ -3209,7 +3118,7 @@ class SpectraLogicAPI:
                             sys.stdout.flush()
 
         except Exception as e:
-            raise
+            raise(e)
 
 
     #--------------------------------------------------------------------------
@@ -3286,7 +3195,7 @@ class SpectraLogicAPI:
                     sys.stdout.flush()
 
         except Exception as e:
-            raise
+            raise(e)
 
 
     #--------------------------------------------------------------------------
@@ -3494,7 +3403,7 @@ class SpectraLogicAPI:
                 sys.stdout.flush()
 
         except Exception as e:
-            raise
+            raise(e)
 
     #--------------------------------------------------------------------------
     #
@@ -3578,7 +3487,7 @@ class SpectraLogicAPI:
                     sys.stdout.flush()
 
         except Exception as e:
-            raise
+            raise(e)
 
 
     #--------------------------------------------------------------------------
@@ -3614,7 +3523,7 @@ class SpectraLogicAPI:
                     sys.stdout.flush()
 
         except Exception as e:
-            raise
+            raise(e)
 
     def packageprogress(self):
 
@@ -3691,7 +3600,7 @@ class SpectraLogicAPI:
             print(message)
 
         except Exception as e:
-            raise
+            raise(e)
 
     #--------------------------------------------------------------------------
     #
@@ -3712,7 +3621,7 @@ class SpectraLogicAPI:
                 raise(Exception(filename + " is not a valid .hps file."))
 
             url  = self.baseurl + "/packageUpload.xml"
-            tree = self.run_command(url, filename)
+            tree = self.run_command(url, filename=filename)
 
             # get the immediate response
             status = "OK"
@@ -3725,7 +3634,7 @@ class SpectraLogicAPI:
             print("Successfully uploaded package: " + os.path.basename(filename))
 
         except Exception as e:
-            raise
+            raise(e)
 
     #--------------------------------------------------------------------------
     #
@@ -3752,7 +3661,7 @@ class SpectraLogicAPI:
                     sys.stdout.flush()
 
         except Exception as e:
-            raise
+            raise(e)
 
 
     #--------------------------------------------------------------------------
@@ -3821,7 +3730,7 @@ class SpectraLogicAPI:
                                                    slotNumber, slotBarcode))
 
         except Exception as e:
-            raise
+            raise(e)
 
 
 
@@ -3873,7 +3782,7 @@ class SpectraLogicAPI:
         except Exception as e:
             print("rcmstatuslist Error getting RCM IDs: " + str(e), file=sys.stderr)
             sys.stdout.flush()
-            raise
+            raise(e)
 
         # Next get the rcmstatus for each RCM
         try:
@@ -3930,7 +3839,7 @@ class SpectraLogicAPI:
 
 
         except Exception as e:
-            raise
+            raise(e)
 
 
     #--------------------------------------------------------------------------
@@ -3992,7 +3901,7 @@ class SpectraLogicAPI:
             sys.stdout.flush()
 
         except Exception as e:
-            raise
+            raise(e)
 
     #--------------------------------------------------------------------------
     #
@@ -4088,7 +3997,7 @@ class SpectraLogicAPI:
                 sys.stdout.flush()
 
         except Exception as e:
-            raise
+            raise(e)
 
     #--------------------------------------------------------------------------
     #
@@ -4160,7 +4069,7 @@ class SpectraLogicAPI:
                     sys.stdout.flush()
 
         except Exception as e:
-            raise
+            raise(e)
 
 
     #--------------------------------------------------------------------------
@@ -4248,7 +4157,7 @@ class SpectraLogicAPI:
                     sys.stdout.flush()
 
         except Exception as e:
-            raise
+            raise(e)
 
 
     #--------------------------------------------------------------------------
@@ -4286,7 +4195,7 @@ class SpectraLogicAPI:
             if firstTime:
                 print()     # newline
         except Exception as e:
-            raise
+            raise(e)
 
         # Verify magazine barcodes
         try:
@@ -4331,7 +4240,7 @@ class SpectraLogicAPI:
                     file=sys.stderr))
 
         except Exception as e:
-            raise
+            raise(e)
 
         print("\n" + str(datetime.datetime.now()) + "\n")
         sys.stdout.flush()
@@ -4897,8 +4806,8 @@ def main():
             cmdparser.print_help()
             sys.exit(1)
     except Exception as e:
-        fullcmd = args.command
-        if args.subcommand is not None:
+        fullcommand = args.command
+        if hasattr(args, "subcommand") and args.subcommand is not None:
             fullcommand = args.command + " " + args.subcommand
         print("Command '" + fullcommand + "': " + str(e), file=sys.stderr)
         #if (args.verbose):

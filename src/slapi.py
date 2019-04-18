@@ -667,9 +667,12 @@ class SpectraLogicAPI:
     #
     # Returns detailed information about each of the drives in the library.
     #
-    def drivelist(self):
+    def drivelist(self, extended=False):
 
-        driveFormat = '{:25} {:11} {:15} {:12} {:25} {:15} {:15} {:13} {:11} {:25} {:9} {:7} {:6} {:9} {:10} {:8} {:14} {:15}'
+        if extended:
+            driveFormat = '{:25} {:11} {:15} {:12} {:25} {:15} {:15} {:13} {:11} {:25} {:9} {:7} {:6} {:9} {:10} {:8} {:14} {:15}'
+        else:
+            driveFormat = '{:25} {:11} {:15} {:12} {:25} {:15} {:15} {:13} {:11} {:25} {:9} {:7} {:6} {:10} {:8} {:14} {:15}'
 
         try:
             url  = self.baseurl + "/driveList.xml?action=list"
@@ -685,26 +688,40 @@ class SpectraLogicAPI:
                             myid = element.text.rstrip()
                             print("  drive:")
                             print("    ID: " + myid);
-                            loadCount = self.get_drive_load_count(myid)
-                            print("    loadCount: " + loadCount);
+                            if extended:
+                                loadCount = self.get_drive_load_count(myid)
+                                print("    loadCount: " + loadCount);
                 sys.stdout.flush()
                 return
-            print(driveFormat. \
-                format("ID", "DriveStatus", "Partition",
-                       "PartDriveNum", "DriveType",
-                       "SerialNum", "MfrSerialNum", "DriveFirmware",
-                       "DCMFirmware", "WWN", "FibreAddr",
-                       "LoopNum", "Health", "LoadCount",
-                       "SparedWith", "SpareFor", "SparePotential",
-                       "FirmwareStaging"))
-            print(driveFormat. \
-                format("-------------------------", "-----------",
-                       "---------------", "------------",
-                       "-------------------------", "---------------",
-                       "---------------", "-------------", "-----------",
-                       "-------------------------", "---------", "-------",
-                       "------", "---------", "----------", "--------",
-                       "--------------", "---------------"))
+            if extended:
+                print(driveFormat.format("ID", "DriveStatus", "Partition",
+                          "PartDriveNum", "DriveType",
+                          "SerialNum", "MfrSerialNum", "DriveFirmware",
+                          "DCMFirmware", "WWN", "FibreAddr",
+                          "LoopNum", "Health", "LoadCount",
+                          "SparedWith", "SpareFor", "SparePotential",
+                          "FirmwareStaging"))
+                print(driveFormat.format("-------------------------", "-----------",
+                          "---------------", "------------",
+                          "-------------------------", "---------------",
+                          "---------------", "-------------", "-----------",
+                          "-------------------------", "---------", "-------",
+                          "------", "---------", "----------", "--------",
+                          "--------------", "---------------"))
+            else:
+                print(driveFormat.format("ID", "DriveStatus", "Partition",
+                          "PartDriveNum", "DriveType",
+                          "SerialNum", "MfrSerialNum", "DriveFirmware",
+                          "DCMFirmware", "WWN", "FibreAddr",
+                          "LoopNum", "Health", "SparedWith", "SpareFor",
+                          "SparePotential", "FirmwareStaging"))
+                print(driveFormat.format("-------------------------",
+                          "-----------", "---------------", "------------",
+                          "-------------------------", "---------------",
+                          "---------------", "-------------", "-----------",
+                          "-------------------------", "---------", "-------",
+                          "------", "----------", "--------",
+                          "--------------", "---------------"))
             sys.stdout.flush()
             for drive in tree:
                 myid = status = partition = paritionDriveNum = ""
@@ -727,7 +744,8 @@ class SpectraLogicAPI:
                         # 01/18/19: problem still exists.
                         # 04/10/19: Spectra believes this is fixed in the Casle
                         # release scheduled for June/July 2019
-                        loadCount = self.get_drive_load_count(myid)
+                        if extended:
+                            loadCount = self.get_drive_load_count(myid)
                     elif element.tag == "driveStatus":
                         status = element.text.rstrip()
                     elif element.tag == "partition":
@@ -4877,6 +4895,8 @@ def main():
     drivelist_parser = cmdsubparsers.add_parser('drivelist',
         help='Returns detailed information about each of the drives in the    \
               library.')
+    drivelist_parser.add_argument('--extended', '-e', action='store_true',
+                                  help='Get extended information for each drive.')
 
     etherlibrefresh_parser = cmdsubparsers.add_parser('etherlibrefresh',
         help='Attempts to reestablish the Ethernet connection and update the  \
@@ -5203,7 +5223,7 @@ def main():
         elif args.command == "controllerslist":
             slapi.controllerslist()
         elif args.command == "drivelist":
-            slapi.drivelist()
+            slapi.drivelist(args.extended)
         elif args.command == "etherlibrefresh":
             slapi.etherlibrefresh()
         elif args.command == "etherlibstatus":

@@ -680,17 +680,16 @@ class SpectraLogicAPI:
             print("\nDrive List")
             print("----------")
             if self.longlist:
+                if extended:
+                    for drive in tree:
+                        for element in drive:
+                            if element.tag == "ID":
+                                myid = element.text.rstrip()
+                                loadCount   = self.get_drive_load_count(myid)
+                                newElt      = xml.etree.ElementTree.Element("loadCount")
+                                newElt.text = str(loadCount)
+                                drive.append(newElt)
                 self.long_listing(tree, 0)
-                print("\ngetDriveLoadCount:");
-                for drive in tree:
-                    for element in drive:
-                        if element.tag == "ID":
-                            myid = element.text.rstrip()
-                            print("  drive:")
-                            print("    ID: " + myid);
-                            if extended:
-                                loadCount = self.get_drive_load_count(myid)
-                                print("    loadCount: " + loadCount);
                 sys.stdout.flush()
                 return
             if extended:

@@ -501,6 +501,59 @@ class SpectraLogicAPI:
 
     #--------------------------------------------------------------------------
     #
+    # Check to see there's a "traces" command in progress. Wait up to waittime
+    # minutes for the command to complete.
+    #
+    def check_for_traces_in_progress(self, waittime):
+
+        # check for traces command in progress and wait until done
+        try:
+            if (not self.check_command_progress("traces", False)):
+                print("There's a traces command in progress. Will wait up to "
+                      + str(waittime) + " minutes retrying.", end='')
+                sys.stdout.flush()
+                count = 0
+                while (not self.check_command_progress("traces", False)):
+                    # put out an in progress 'dot'
+                    print(".", end='')
+                    sys.stdout.flush()
+                    count += 1
+                    # wait 4 seconds before retrying
+                    time.sleep(4)
+                    if (count > ((60 * waittime) / 4)):    # five minutes
+                        print("\nGiving up. Retry this command later.")
+                        sys.stdout.flush()
+                        sys.exit(1)
+                print()
+        except Exception as e:
+            print("traces progress Error: " + str(e), file=sys.stderr)
+            raise(e)
+
+
+    #--------------------------------------------------------------------------
+    #
+    # Check to see there's security audit in progress
+    # Returns True if security audit is running; False otherwise
+    #
+    def check_security_audit_in_progress(self):
+
+        try:
+            status, message = self.securityauditstatus(True)
+        except Exception as e:
+            if (self.verbose):
+                print("check_security_audit_command_progress Error: " + str(e),
+                      file=sys.stderr)
+                traceback.print_exc()
+            raise(e)
+
+        if (message == "Security audit is not running."):
+            return (False)
+        else:
+            return (True)
+
+
+    #--------------------------------------------------------------------------
+    #
     # Checks for system error ("error" record) or syntax error ("syntaxError"
     # record) and raises an exception if it found any; otherwise it returns
     # false. The exception will contain the system/syntax error message.
@@ -664,14 +717,16 @@ class SpectraLogicAPI:
                 for element in drive:
                     if element.tag == "ID":
                         myid = element.text.rstrip()
-                        # ToDo #####
+                        # TODO #####
                         # Getting "returned an invalid load count" when running
                         # the command while testing on NERF. So comment out for
                         # now. Todd sent email to Spectra. 10/16/18
                         # 10/17/18: Spectra believes that the problem is because
                         # the drive has never been loaded since the firmware
                         # update. So told me to load/unload.
-                        # 01/18:19: problem still exists.
+                        # 01/18/19: problem still exists.
+                        # 04/10/19: Spectra believes this is fixed in the Casle
+                        # release scheduled for June/July 2019
                         loadCount = self.get_drive_load_count(myid)
                     elif element.tag == "driveStatus":
                         status = element.text.rstrip()
@@ -825,6 +880,89 @@ class SpectraLogicAPI:
 
     #--------------------------------------------------------------------------
     #
+    # Gathers the specified security audit log to the LCM.
+    #
+    # See getSecurityAuditLogNames to determine the names of the bzip2 files
+    # currently stored on the RCM.
+    #
+    # Notes:
+    #     * This command was added with BlueScale12.8.01.
+    #     * This command is only supported on TFinity libraries.
+    #
+    def gathersecurityauditlog(self, filename):
+
+        # Check for traces command in progress and wait up to 5 minutes for it
+        # to be done
+        try:
+            self.check_for_traces_in_progress(5) #wait 5 minutes
+        except Exception as e:
+            print("traces progress Error: " + str(e), file=sys.stderr)
+            raise(e)
+
+        # Look for the file and see if it's been gathered
+        gathered = "no"
+        logName = "<invalid>"
+        found = False
+        try:
+            url  = self.baseurl + "/traces.xml?action=getSecurityAuditLogNames"
+            tree = self.run_command(url)
+
+            # Look for all the log names
+            for secAuditNames in tree:
+                for files in secAuditNames:
+                    logName = files.find("logName").text.rstrip()
+                    if (logName == filename):
+                        found = True
+                        gathered = files.find("gathered").text.rstrip()
+        except Exception as e:
+            print("getSecurityAuditLogNames Error: " + str(e), file=sys.stderr)
+            raise(e)
+
+        # Did we find the file? If not, then can't continue.
+        if not found:
+            print("File '" + filename + "' not found. Cannot gather the " +
+                  "specified security audit log.")
+            sys.stdout.flush()
+            return
+
+        # Is the file already on the LCM (i.e. "gathered")?
+        if gathered == "yes":
+            print("File '" + filename + "' is already gathered to the LCM.")
+            sys.stdout.flush()
+            return
+
+        # If the file hasn't been gathered (i.e. downloaded from the RCM),
+        # then gather it.
+        try:
+            print("Gathering the security audit log for file: " + filename)
+            sys.stdout.flush()
+            url  = self.baseurl + "/traces.xml?action=gatherSecurityAuditLog&name=" + filename
+            tree = self.run_command(url)
+        except Exception as e:
+            print("gatherSecurityAuditLog Error: " + str(e), file=sys.stderr)
+            sys.stdout.flush()
+            raise(e)
+
+
+        # poll for gatherSecurityAuditLog to be done
+        try:
+            while (not self.check_command_progress("traces", False)):
+                # put out an in progress 'dot'
+                print(".", end='')
+                sys.stdout.flush()
+                # wait 4 seconds before retrying
+                time.sleep(4)
+            print("\nGather is complete")
+            sys.stdout.flush()
+        except Exception as e:
+            print("traces gatherSecurityAuditLog progress Error: " + str(e),
+                  file=sys.stderr)
+            sys.stdout.flush()
+            raise(e)
+
+
+    #--------------------------------------------------------------------------
+    #
     # Generates a new AutoSupport Log (ASL) file
     #
     def generateasl(self):
@@ -951,7 +1089,7 @@ class SpectraLogicAPI:
             # Call the run command wrapper that returns a string
             xmldoc = self.run_command(url, returnstring=True)
 
-            # Write the data to a file in the current working directory.
+            # Write the binary data to a file in the current working directory.
             # The name of the file is the same as the ASL name except:
             # - replace spaces with underscores
             # - append with .zip since it's a zip file.
@@ -1186,7 +1324,7 @@ class SpectraLogicAPI:
             # - the number of items reported is the number of slots
             # DKM: Don't think we need this paranoia. Commenting out for now.
             #      It could be the case that the TaraPack is rightfully not
-            #      full (i.e. a cart in every slot). (ToDo)
+            #      full (i.e. a cart in every slot). (TODO)
             #if (numSlots != len(actualList)):
             #    print("MISMATCH Error: library returned '" +                   \
             #          str(len(actualList)) + "' items for this TeraPack; " +   \
@@ -1222,7 +1360,7 @@ class SpectraLogicAPI:
             # Call the run command wrapper that returns a string
             xmldoc = self.run_command(url, returnstring=True)
 
-            # Write the data to a file in the current working directory.
+            # Write the binary data to a file in the current working directory.
             # The name of the file is the same as the motion log name
             f = open(filename, 'wb')
             f.write(xmldoc)
@@ -1306,7 +1444,7 @@ class SpectraLogicAPI:
             # Call the run command wrapper that returns a string
             xmldoc = self.run_command(url, returnstring=True)
 
-            # Write the data to a file in the current working directory.
+            # Write the binary data to a file in the current working directory.
             f = open('drivetraces.zip', 'wb')
             f.write(xmldoc)
             f.close()
@@ -1340,7 +1478,7 @@ class SpectraLogicAPI:
             # Call the run command wrapper that returns a string
             xmldoc = self.run_command(url, returnstring=True)
 
-            # Write the data to a file in the current working directory.
+            # Write the binary data to a file in the current working directory.
             # The name of the file is the same as the motion log name
             f = open(filename, 'wb')
             f.write(xmldoc)
@@ -1546,7 +1684,7 @@ class SpectraLogicAPI:
             # Call the run command wrapper that returns a string
             xmldoc = self.run_command(url, returnstring=True)
 
-            # Write the data to a file in the current working directory.
+            # Write the binary data to a file in the current working directory.
             # The name of the file is the same as the motion log name
             f = open(filename, 'wb')
             f.write(xmldoc)
@@ -1632,7 +1770,7 @@ class SpectraLogicAPI:
             # Call the run command wrapper that returns a string
             xmldoc = self.run_command(url, returnstring=True)
 
-            # Write the data to a file in the current working directory.
+            # Write the binary data to a file in the current working directory.
             # The name of the file is the same as the QIP log name
             f = open(filename, 'wb')
             f.write(xmldoc)
@@ -1678,6 +1816,136 @@ class SpectraLogicAPI:
                     if name.tag == "logName":
                         print(name.text.rstrip())
                         sys.stdout.flush()
+
+        except Exception as e:
+            raise(e)
+
+    #--------------------------------------------------------------------------
+    #
+    # Retrieves the specified bzip2 Security Audit Log file from the library.
+    # This command will verify that the specified Security Audit Log file
+    # exists in the Robotics Control Module (RCM) and/or the Library Control
+    # Module (LCM). If it's missing from the RCM, then nothing can be done.
+    # If it's missing from the LCM, then it will download (i.e. gathered) from
+    # the RCM to the LCM). Next, it will pull it from the LCM and  store it in
+    # the current working directory.
+    #
+    # Outputs a filename in the current working directory that is the Security
+    # Audit Log file name.
+    #
+    # Notes:
+    #     * This command was added with BlueScale12.8.01.
+    #     * This command is only supported on TFinity libraries.
+    #
+    def getsecurityauditlogfile(self, filename):
+
+        # Function gathersecurityauditlog does a number of steps to validate
+        # the filename and gather the security audit log.  These steps include:
+        #   - Check for traces command in progress and wait up to 5 minutes for
+        #     it to be done
+        #   - Look for the file and see if it's been gathered
+        #   - Did we find the file? If not, then can't continue.
+        #   - Is the file already on the LCM (i.e. "gathered")? If not,
+        #     downloaded it from the RCM using gatherSecurityAuditLog.
+        #   - poll for gatherSecurityAuditLog to be done
+        try:
+            self.gathersecurityauditlog(filename)
+        except Exception as e:
+            print("gathersecurityauditlog Error: " + str(e), file=sys.stderr)
+            sys.stdout.flush()
+            raise(e)
+
+        # now get the security audit log
+        try:
+            print("Getting the Security Audit log file '" + filename + "'")
+            sys.stdout.flush()
+            url  = self.baseurl + "/traces.xml?action=getSecurityAuditLog&name=" + filename
+
+            # Call the run command wrapper that returns a string
+            xmldoc = self.run_command(url, returnstring=True)
+
+            # Write the binary data to a file in the current working directory.
+            # The name of the file is the same as the motion log name
+            f = open(filename, 'wb')
+            f.write(xmldoc)
+            f.close()
+
+            print("Successfully created: '" + filename + "'")
+            sys.stdout.flush()
+
+        except Exception as e:
+            print("getsecurityauditlogfile Error: " + str(e), file=sys.stderr)
+            sys.stdout.flush()
+            raise(e)
+
+
+    #--------------------------------------------------------------------------
+    #
+    # The getsecurityauditlognames command returns a list of the security audit
+    # logs on the Robotics Control Modules (RCM) with an attribute to indicate
+    # which ones are also gathered and present on the Library Control Module
+    # (LCM). The LCM keeps no more than five security audit logs.
+    #
+    # There are two types of security audit logs: securityAuditInterim and
+    # securityAudit.
+    #     * securityAuditInterim.serial_number.YYYY-MM-DDThhmmss.sss.bz2
+    #       Contains the logs collected between security audits. This includes
+    #       information such as doors being opened.
+    #     * securityAudit.serial_number.YYYY-MM-DDThhmmss.sss.bz2
+    #       Contains security audit logs. This includes information such as
+    #       missing TeraPack magazines or tapes in unexpected slots.
+    #     * The log name for both types of logs contains the serial number of
+    #       the library on which the security audit ran.
+    #     * The log name contains a date (YYYY-MM-DDThhmmss.sss) which for an
+    #       interim security audit indicates the time and date the last audit
+    #       ended and for a security audit indicates the time and date that the
+    #       audit began.
+    #           YYYY is the year,
+    #           MM is the two-digit month,
+    #           DD is the two-digit day,
+    #           hh is the 24-hour hour,
+    #           mm is the minute, and
+    #           ss.sss is the seconds and milliseconds.
+    #
+    # Notes:
+    #     * This command was added with BlueScale12.8.01.
+    #     * This command is only supported on TFinity libraries.
+    #
+    def getsecurityauditlognames(self):
+
+        fmt = '{:60} {:7}'
+
+        # check for traces command in progress and wait up to 5 minutes for it
+        # to be done
+        try:
+            self.check_for_traces_in_progress(5) #wait 5 minutes
+        except Exception as e:
+            print("traces progress Error: " + str(e), file=sys.stderr)
+            raise(e)
+
+        try:
+            url  = self.baseurl + "/traces.xml?action=getSecurityAuditLogNames"
+            tree = self.run_command(url)
+            print("\nSecurity Audit Log Names")
+            print(  "------------------------")
+            sys.stdout.flush()
+            if self.longlist:
+                self.long_listing(tree, 0)
+                return
+
+            print(fmt.format("LogName", "On LCM?"))
+            print(fmt.format(
+                "-----------------------------------------------------------",
+                "-------"))
+            sys.stdout.flush()
+
+            # Look for all the log names
+            for secAuditNames in tree:
+                for files in secAuditNames:
+                    logName = files.find("logName").text.rstrip()
+                    gathered = files.find("gathered").text.rstrip()
+                    print(fmt.format(logName, gathered))
+                    sys.stdout.flush()
 
         except Exception as e:
             raise(e)
@@ -2205,7 +2473,7 @@ class SpectraLogicAPI:
                                        enabled, systemContact, systemLocation,
                                        community, trapCommunity,
                                        trapDescription, trapIPAddress))
-                        # ToDo: I wasn't able to test trapDestination 11/26/18
+                        # TODO: I wasn't able to test trapDestination 11/26/18
                         if setting.tag == "trapDestination":
                             for trap in setting:
                                 if trap.tag == "community":
@@ -2905,8 +3173,8 @@ class SpectraLogicAPI:
                                     for fan in frameMM:
                                         if fan.tag == "number":
                                             fanInFMMNum = fan.text.strip()
-                                        #ToDo: The documentation shows an "on"
-                                        #record, but I'v never seen it, so I'm
+                                        #TODO: The documentation shows an "on"
+                                        #record, but I've never seen it, so I'm
                                         #not looking for it.
                                         elif fan.tag == "speedInRPM":
                                             fanSpeed = fan.text.strip()
@@ -3903,6 +4171,7 @@ class SpectraLogicAPI:
         except Exception as e:
             raise(e)
 
+
     #--------------------------------------------------------------------------
     #
     # Resets the specified Hardware Health Monitoring (HHM) counter to zero. A
@@ -3998,6 +4267,166 @@ class SpectraLogicAPI:
 
         except Exception as e:
             raise(e)
+
+
+    #--------------------------------------------------------------------------
+    #
+    # Begins a Security Audit which is a physical audit of the entire library.
+    #
+    # Use the securityAudit.xml command to have a TFinity library check all
+    # TeraPack magazines to make sure that the expected tapes are in them.
+    #
+    # Notes:
+    #   - The securityAudit.xml command was added with BlueScale 12.8.01.
+    #   - The securityAudit.xml command cannot run while another command that
+    #     makes the robot(s) unavailable, such as verifyMagazineBarcodes, is
+    #     running.
+    #
+    def securityaudit(self):
+
+        try:
+            # Don't start a security audit if one is currently in progress
+            if self.check_security_audit_in_progress():
+                raise(Exception(
+                    "Will not issue securityaudit command due to pending " +
+                    "securityaudit command."))
+
+            # Cannot do a security audit during verifyMagazineBarcodes
+            if not self.check_command_progress("utils", True):
+                raise(Exception(
+                    "Will not issue securityaudit command due to pending " +
+                    "utils command."))
+        except Exception as e:
+            raise(e)
+
+        print("Starting physical security audit...")
+        sys.stdout.flush()
+        try:
+            url  = self.baseurl + "/securityAudit.xml?action=start"
+            tree = self.run_command(url)
+            try:
+                self.check_for_error(tree)
+
+                # get the immediate response
+                status = "OK"
+                for child in tree:
+                    if child.tag == "status":
+                        status = child.text.rstrip()
+                    if child.tag == "message":
+                        message = child.text.rstrip()
+                if status != "OK":
+                    #TODO: wondering if we should abort security audit
+                    #      (i.e. perhaps it actually started?)
+                    raise(Exception("Failure starting physical security audit" +
+                                    " : status=" + status + " : " + message))
+            except Exception as e:
+                #TODO: wondering if there are cases where we should abort
+                #security audit (i.e. perhaps it actually started)?
+                raise(Exception("Error issuing securityAudit command: " +
+                                 str(e)))
+
+        except Exception as e:
+            raise
+
+
+    #--------------------------------------------------------------------------
+    #
+    # Stops a currently in-progress Security Audit (physical audit) of the
+    # library.
+    #
+    # Note: The securityAudit.xml command was added with BlueScale 12.8.01.
+    #
+    def securityauditabort(self):
+
+        print("Aborting physical security audit...")
+        sys.stdout.flush()
+        try:
+            url  = self.baseurl + "/securityAudit.xml?action=abort"
+            tree = self.run_command(url)
+            try:
+                self.check_for_error(tree)
+
+                # get the immediate response
+                status = "OK"
+                for child in tree:
+                    if child.tag == "status":
+                        status = child.text.rstrip()
+                    if child.tag == "message":
+                        message = child.text.rstrip()
+                if status != "OK":
+                    raise(Exception("Failure aborting physical security audit" +
+                                    " : status=" + status + " : " + message))
+            except Exception as e:
+                raise(Exception("Error issuing securityAudit abort command: " +
+                                 str(e)))
+
+        except Exception as e:
+            raise
+
+
+    #--------------------------------------------------------------------------
+    #
+    # Determine the progress of a Security Audit (physical audit) of the
+    # library.
+    #
+    # Returns two strings:
+    #     status    indicates the status of the security audit
+    #               (e.g. FAILURE, OK, etc)
+    #     message   The message about the state/progress of the security audit
+    #               (e.g. Security audit is not running.)
+    # Indicating the status/progress of the security audit.
+    #
+    # If quiet=False, then prints the "<status> :: <message> to stdout
+    #
+    # Notes:
+    #     * The securityAudit.xml command was added with BlueScale 12.8.01.
+    #     * A return message of "Security audit is not running." indicates that
+    #       the security audit is not running.
+    #
+    def securityauditstatus(self, quiet):
+
+        try:
+            url  = self.baseurl + "/securityAudit.xml?action=status"
+            tree = self.run_command(url)
+
+            status = "OK"
+            message = "<invalid>"
+            for child in tree:
+                if child.tag == "status":
+                    status = child.text.rstrip()
+                if child.tag == "message":
+                    message = child.text.rstrip()
+            else:
+                if not quiet:
+                    print(status + " :: " + message)
+                    sys.stdout.flush()
+                return(status, message)
+
+        except Exception as e:
+            raise
+
+
+    #--------------------------------------------------------------------------
+    #
+    # Every 5 seconds poll the securityaudit status until the audit is not
+    # running or reports a failure status.
+    #
+    def securityauditmonitor(self):
+
+        try:
+            status = "OK"
+            while (status != "FAILURE"):
+                status, message = self.securityauditstatus(True) # quiet
+                print(str(datetime.datetime.now()) +
+                      " :: " + status + " :: " + message)
+                sys.stdout.flush()
+                if (message == "Security audit is not running."):
+                    break
+                time.sleep(5)   # sleep before next poll
+
+        except Exception as e:
+            raise
+
 
     #--------------------------------------------------------------------------
     #
@@ -4456,6 +4885,12 @@ def main():
     etherlibstatus_parser = cmdsubparsers.add_parser('etherlibstatus',
         help='Retrieve status of the library EtherLib connections.')
 
+    gathersecurityauditlog_parser = cmdsubparsers.add_parser(
+        'gathersecurityauditlog',
+        help='Retrieves the specified Security Audit Log file from the library.')
+    gathersecurityauditlog_parser.add_argument('filename', action='store',
+        help='Security Audit Log file')
+
     generateasl_parser = cmdsubparsers.add_parser('generateasl',
         help='Generates a new AutoSupport Log (ASL) file')
 
@@ -4530,6 +4965,38 @@ def main():
               Control Module (LCM). The QIP logs collected for each day are   \
               zipped and stored on the hard drive in the LCM. Each zip        \
               filename includes the date it was created.')
+
+    getsecurityauditlogfile_parser = cmdsubparsers.add_parser(
+        'getsecurityauditlogfile',
+        help='Retrieves the specified bzip2 Security Audit Log file from the  \
+              library. This command will verify that the specified Security   \
+              Audit Log file exists in the Robotics Control Module (RCM)      \
+              and the Library Control Module (LCM). If it is missing from     \
+              the RCM, then nothing can be done. If it is missing from the    \
+              LCM, then it will download (i.e. gathered) from the RCM to the  \
+              LCM). Next, it will pull it from the LCM and store it in the    \
+              current working directory.')
+    getsecurityauditlogfile_parser.add_argument('filename', action='store',
+        help='Security Audit Log file')
+
+    getsecurityauditlognames_parser = cmdsubparsers.add_parser(
+        'getsecurityauditlognames',
+        help='Returns a list of the security audit logs on the Robotics       \
+              Control Modules (RCM) with an attribute to indicate             \
+              which ones are also gathered and present on the Library         \
+              Control Module (LCM). The LCM keeps no more than five           \
+              security audit logs. There are two types of security            \
+              audit logs: securityAuditInterim and securityAudit. The         \
+              securityAuditInterim contains the logs collected between        \
+              security audits. This includes information such as doors        \
+              being opened. The securityAudit contains security audit         \
+              logs. This includes information such as missing TeraPack        \
+              magazines or tapes in unexpected slots. The log name            \
+              for both types of logs contains the serial number of the        \
+              library on which the security audit ran. The log name for       \
+              an interim security audit includes a date/time indicating       \
+              when the last audit ended; and, for a security audit the        \
+              date/time indicates when the audit began.')
 
     gettapstate_parser = cmdsubparsers.add_parser('gettapstate',
         help='Returns the status of all TeraPack Access Ports (TAP)s.')
@@ -4644,6 +5111,24 @@ def main():
         type=str.lower,
         choices=['1', '2'])
 
+    securityaudit_parser = cmdsubparsers.add_parser('securityaudit',
+        help='securityaudit command help')
+    securityaudit_subparser = securityaudit_parser.add_subparsers(
+        title="subcommands",
+        dest="subcommand")
+    securityaudit_abort_parser = securityaudit_subparser.add_parser('abort',
+        help='Stops a currently in-progress Security Audit (physical audit)   \
+              of the library. This command was added with BlueScale 12.8.01.')
+    securityaudit_monitor_parser = securityaudit_subparser.add_parser('monitor',
+        help='Every 5 seconds poll the securityaudit status until the audit   \
+              is not running or reports failure.')
+    securityaudit_start_parser = securityaudit_subparser.add_parser('start',
+        help='Begin a Security Audit which is a physical audit of the entire  \
+              library. This command was added with BlueScale 12.8.01.')
+    securityaudit_status_parser = securityaudit_subparser.add_parser('status',
+        help='Determine the progress of a Security Audit (physical audit) of  \
+              the library. This command was added with BlueScale 12.8.01.')
+
     systemmessages_parser = cmdsubparsers.add_parser('systemmessages',
         help='Returns the list of system messages that are currently stored   \
               on the library. Most recent first.')
@@ -4723,6 +5208,8 @@ def main():
             slapi.etherlibrefresh()
         elif args.command == "etherlibstatus":
             slapi.etherlibstatus()
+        elif args.command == "gathersecurityauditlog":
+            slapi.gathersecurityauditlog(args.filename)
         elif args.command == "generateasl":
             slapi.generateasl()
         elif args.command == "generatedrivetrace":
@@ -4751,6 +5238,10 @@ def main():
             slapi.getqiplog(args.filename)
         elif args.command == "getqiplognames":
             slapi.getqiplognames()
+        elif args.command == "getsecurityauditlogfile":
+            slapi.getsecurityauditlogfile(args.filename)
+        elif args.command == "getsecurityauditlognames":
+            slapi.getsecurityauditlognames()
         elif args.command == "gettapstate":
             slapi.gettapstate()
         elif args.command == "gettrace":
@@ -4783,7 +5274,7 @@ def main():
             elif args.subcommand == "stage":
                 slapi.packagestage(args.packagename)
             else:
-                raise(Exception("package: Unknown option " + option))
+                raise(Exception("package: Unknown option " + args.subcommand))
         elif args.command == "partitionlist":
             slapi.partitionlist()
         elif args.command == "physinventorylist":
@@ -4796,6 +5287,17 @@ def main():
             slapi.resethhmcounter(args.resethhmcounter,
                                   args.subType,
                                   args.robot)
+        elif args.command == "securityaudit":
+            if args.subcommand is None or args.subcommand == "start":
+                slapi.securityaudit()
+            elif args.subcommand == "abort":
+                slapi.securityauditabort()
+            elif args.subcommand == "monitor":
+                slapi.securityauditmonitor()
+            elif args.subcommand == "status":
+                slapi.securityauditstatus(False)
+            else:
+                raise(Exception("securityaudit: Unknown option " + args.subcommand))
         elif args.command == "systemmessages":
             slapi.systemmessages()
         elif args.command == "tasklist":

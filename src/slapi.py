@@ -3951,6 +3951,46 @@ class SpectraLogicAPI:
 
     #--------------------------------------------------------------------------
     #
+    # Retrieve a list of all occupied magazine and cartridge locations in all
+    # the partitions. The list includes the offset value for each occupied
+    # magazine and slot, as well as the barcodes of the magazines and
+    # cartridges, if available.
+    #
+    # Note: Empty locations are not included in the list, but can be identified
+    #       by the gaps in the offset values returned by the command.
+    #
+    def physinventoryall(self):
+
+        topHdrFormat = '{:26} {}'
+        listFormat = '{:15} {:9} {:6} {:7} {:5} {:7} {:6} {:6} {:11}'
+
+
+        # First get a list of all the paritions
+        try:
+            url  = self.baseurl + "/partitionList.xml"
+            partitionTree = self.run_command(url)
+        except Exception as e:
+            raise(e)
+
+        if len(partitionTree) == 0:
+            raise(Exception("Error: paritionList is reporting 0 paritions"))
+
+        # For each partition print the inventory.
+        try:
+            header = True
+            for paritionName in partitionTree:
+                if (paritionName.tag != "partitionName"):
+                    continue;
+                partition = paritionName.text.strip()
+                self.physinventorylist(partition, header)
+                header = False
+
+        except Exception as e:
+            raise(e)
+
+
+    #--------------------------------------------------------------------------
+    #
     # Retrieve a list of all occupied magazine and cartridge locations in the
     # specified partition. The list includes the offset value for each occupied
     # magazine and slot, as well as the barcodes of the magazines and
@@ -3959,7 +3999,7 @@ class SpectraLogicAPI:
     # Note: Empty locations are not included in the list, but can be identified
     #       by the gaps in the offset values returned by the command.
     #
-    def physinventorylist(self, partition):
+    def physinventorylist(self, partition, header=True):
 
         topHdrFormat = '{:26} {}'
         listFormat = '{:15} {:9} {:6} {:7} {:5} {:7} {:6} {:6} {:11}'
@@ -3967,22 +4007,25 @@ class SpectraLogicAPI:
         try:
             url  = self.baseurl + "/physInventory.xml?action=list&partition=" + partition
             tree = self.run_command(url)
-            print("\nPhysical Inventory List")
-            print(  "-----------------------")
+            if header:
+                print("\nPhysical Inventory List")
+                print(  "-----------------------")
+                sys.stdout.flush()
             if self.longlist:
                 self.long_listing(tree, 0)
                 return
             for part in tree:
-                print(topHdrFormat.format("",
-                    "----------------------Magazine-----------------------"))
-                print(listFormat.
-                    format("Partition", "MediaPool", "Offset", "Barcode",
-                           "Frame", "TapeBay", "Drawer", "Slot", "SlotBarcode"))
-                print(listFormat.
-                    format("---------------", "---------", "------", "-------",
-                           "-----", "-------", "------", "------",
-                           "-----------"))
-                sys.stdout.flush()
+                if header:
+                    print(topHdrFormat.format("",
+                        "----------------------Magazine-----------------------"))
+                    print(listFormat.
+                        format("Partition", "MediaPool", "Offset", "Barcode",
+                               "Frame", "TapeBay", "Drawer", "Slot", "SlotBarcode"))
+                    print(listFormat.
+                        format("---------------", "---------", "------", "-------",
+                               "-----", "-------", "------", "------",
+                               "-----------"))
+                    sys.stdout.flush()
 
                 mediaPool = ""
                 for pool in part:
@@ -5093,6 +5136,12 @@ def main():
     partitionlist_parser = cmdsubparsers.add_parser('partitionlist',
         help='List all Spectra Logic Library partitions.')
 
+    physinventoryall_parser = cmdsubparsers.add_parser('physinventoryall',
+        help='Retrieve a list of all occupied magazine and cartridge          \
+              locations in all partitions. The list includes the              \
+              offset value for each occupied magazine and slot, as well as    \
+              the barcodes of the magazines and cartridges, if available.')
+
     physinventorylist_parser = cmdsubparsers.add_parser('physinventorylist',
         help='Retrieve a list of all occupied magazine and cartridge          \
               locations in the specified partition. The list includes the     \
@@ -5296,6 +5345,8 @@ def main():
                 raise(Exception("package: Unknown option " + args.subcommand))
         elif args.command == "partitionlist":
             slapi.partitionlist()
+        elif args.command == "physinventoryall":
+            slapi.physinventoryall()
         elif args.command == "physinventorylist":
             slapi.physinventorylist(args.partition)
         elif args.command == "rcmstatuslist":

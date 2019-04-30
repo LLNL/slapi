@@ -2318,6 +2318,39 @@ class SpectraLogicAPI:
 
     #--------------------------------------------------------------------------
     #
+    # Lists all storage slots, entry/exit slots, and drives for all partitions.
+    # - For each slot and drive, the list indicates whether or not it is full.
+    # - For each occupied slot or drive, the list also indicates the barcode
+    #   information of the cartridge and whether or not the cartridge is queued
+    #   for eject.
+    #
+    def inventoryall(self):
+
+        # First get a list of all the paritions
+        try:
+            url  = self.baseurl + "/partitionList.xml"
+            partitionTree = self.run_command(url)
+        except Exception as e:
+            raise(e)
+
+        if len(partitionTree) == 0:
+            raise(Exception("Error: paritionList is reporting 0 paritions"))
+
+        # For each partition print the inventory.
+        try:
+            header = True
+            for paritionName in partitionTree:
+                if (paritionName.tag != "partitionName"):
+                    continue;
+                partition = paritionName.text.strip()
+                self.inventorylist(partition, header)
+                header = False
+
+        except Exception as e:
+            raise(e)
+
+    #--------------------------------------------------------------------------
+    #
     # Lists all storage slots, entry/exit slots, and drives in the specified
     # partition.
     # - For each slot and drive, the list indicates whether or not it is full.
@@ -2325,26 +2358,29 @@ class SpectraLogicAPI:
     #   information of the cartridge and whether or not the cartridge is queued
     #   for eject.
     #
-    def inventorylist(self, partition):
+    def inventorylist(self, partition, header=True):
 
         listFormat = '{:15} {:13} {:6} {:6} {:10} {:6} {:4}'
 
         try:
             url       = self.baseurl + "/inventory.xml?action=list&partition=" + partition
             tree      = self.run_command(url)
-            print("\nInventory List")
-            print("--------------")
+            if header:
+                print("\nInventory List")
+                print("--------------")
+                sys.stdout.flush()
             if self.longlist:
                 self.long_listing(tree, 0)
                 return
             for part in tree:
-                print(listFormat.
-                    format("Partition", "SlotType", "ID", "Offset", "Barcode",
-                           "Queued", "Full"))
-                print(listFormat.
-                    format("---------------", "-------------", "------", "------",
-                           "----------", "------", "----"))
-                sys.stdout.flush()
+                if header:
+                    print(listFormat.
+                        format("Partition", "SlotType", "ID", "Offset",
+                               "Barcode", "Queued", "Full"))
+                    print(listFormat.
+                        format("---------------", "-------------", "------",
+                               "------", "----------", "------", "----"))
+                    sys.stdout.flush()
                 for elt in part:
                     if elt.tag != "name":
                         myid = ""
@@ -3961,10 +3997,6 @@ class SpectraLogicAPI:
     #
     def physinventoryall(self):
 
-        topHdrFormat = '{:26} {}'
-        listFormat = '{:15} {:9} {:6} {:7} {:5} {:7} {:6} {:6} {:11}'
-
-
         # First get a list of all the paritions
         try:
             url  = self.baseurl + "/partitionList.xml"
@@ -5088,6 +5120,10 @@ def main():
               barcode scan of the magazine. In the event of a mismatch, the    \
               inventory database is updated with the results of the scan,')
 
+    inventoryall_parser = cmdsubparsers.add_parser('inventoryall',
+        help='Lists all storage slots, entry/exit slots, and drives for all    \
+              partitions.')
+
     inventorylist_parser = cmdsubparsers.add_parser('inventorylist',
         help='Lists all storage slots, entry/exit slots, and drives in the    \
               specified partition.')
@@ -5318,6 +5354,8 @@ def main():
             slapi.hhmdata()
         elif args.command == "inventoryaudit":
             slapi.inventoryaudit()
+        elif args.command == "inventoryall":
+            slapi.inventoryall()
         elif args.command == "inventorylist":
             slapi.inventorylist(args.partition)
         elif args.command == "librarysettingslist":

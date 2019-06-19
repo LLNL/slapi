@@ -5144,16 +5144,6 @@ def main():
         help='Returns a list of the current Media Lifecycle Management (MLM)  \
               settings.')
 
-    packagelist_parser = cmdsubparsers.add_parser('packagelist',
-        help='Retrieves the name of the BlueScale package currently used by   \
-              the library along with the list of packages currently stored on \
-              the memory card in the LCM.')
-
-    packageupdate_parser = cmdsubparsers.add_parser('packageupdate',
-        help='Update the BlueScale Software and Library Firmware.')
-    packageupdate_parser.add_argument('filename', action='store',
-        help='BlueScale Software and Library Firmware package file')
-
     package_parser = cmdsubparsers.add_parser('package',
         help='package command help.')
     package_subparser       = package_parser.add_subparsers(title="subcommands", dest="subcommand")

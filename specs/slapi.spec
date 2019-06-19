@@ -7,9 +7,9 @@ Group:         System Environment/Base
 Source:        %{name}-%{version}.tar
 BuildRoot:     %{_tmppath}/%{name}-%{version}-%{release}-root
 ExclusiveArch: x86_64
-BuildRequires: python(abi) >= 3.4
-Requires:      python(abi) >= 3.4
-Requires:      python34-requests
+BuildRequires: python(abi) >= 3.6
+Requires:      python(abi) >= 3.6
+Requires:      python36-requests
 
 %define __spec_install_post /usr/lib/rpm/brp-compress || :
 %define debug_package %{nil}

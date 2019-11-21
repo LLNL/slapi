@@ -2557,7 +2557,7 @@ class SpectraLogicAPI:
     #
     def librarystatus(self):
 
-        topFormat = '{:11} {:11} {:9} {:13}'
+        topFormat = '{:11} {:11} {:9} {:20}'
         robotFormat = '{:6} {:9} {:15} {:12} {:19} {:28} {:23} {:32} {:11} {:13} {:14} {:17}'
         moveFormat  = '{:15} {:12} {:12} {:12} {:20} {:19}'
         controllerFormat = '{:25} {:13} {:11} {:11} {:14}'
@@ -2589,9 +2589,9 @@ class SpectraLogicAPI:
             uptimeSeconds    = datetime.timedelta(seconds=int(uptimeSecondsStr.text.strip()))
             print()
             print(topFormat. \
-                format("LibraryType", "RailPowerOn", "SerialNum", "UptimeSeconds"))
+                format("LibraryType", "RailPowerOn", "SerialNum", "Uptime"))
             print(topFormat. \
-                format("-----------", "-----------", "---------", "-------------"))
+                format("-----------", "-----------", "---------", "--------------------"))
             print(topFormat. \
                 format(libraryType.text.strip(),
                        railPowerOn.text.strip(),

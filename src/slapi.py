@@ -2557,7 +2557,7 @@ class SpectraLogicAPI:
     #
     def librarystatus(self):
 
-        topFormat = '{:11} {:11} {:9}'
+        topFormat = '{:11} {:11} {:9} {:13}'
         robotFormat = '{:6} {:9} {:15} {:12} {:19} {:28} {:23} {:32} {:11} {:13} {:14} {:17}'
         moveFormat  = '{:15} {:12} {:12} {:12} {:20} {:19}'
         controllerFormat = '{:25} {:13} {:11} {:11} {:14}'
@@ -2582,18 +2582,21 @@ class SpectraLogicAPI:
                 return
 
             # top level stuff
-            libraryType = tree.find("libraryType")
-            railPowerOn = tree.find("railPowerOn")
-            serialNumber = tree.find("serialNumber")
+            libraryType      = tree.find("libraryType")
+            railPowerOn      = tree.find("railPowerOn")
+            serialNumber     = tree.find("serialNumber")
+            uptimeSecondsStr = tree.find("libraryUpTimeSeconds")
+            uptimeSeconds    = datetime.timedelta(seconds=int(uptimeSecondsStr.text.strip()))
             print()
             print(topFormat. \
-                format("LibraryType", "RailPowerOn", "SerialNum"))
+                format("LibraryType", "RailPowerOn", "SerialNum", "UptimeSeconds"))
             print(topFormat. \
-                format("-----------", "-----------", "---------"))
+                format("-----------", "-----------", "---------", "-------------"))
             print(topFormat. \
                 format(libraryType.text.strip(),
                        railPowerOn.text.strip(),
-                       serialNumber.text.strip()))
+                       serialNumber.text.strip(),
+                       str(uptimeSeconds)))
             sys.stdout.flush()
 
             # initialize some header print variables

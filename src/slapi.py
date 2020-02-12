@@ -2072,7 +2072,7 @@ class SpectraLogicAPI:
     #     DEPRECATED: QIP:[QIP ID]
     #     DEPRECATED: QIPDump:[QIP ID]
     #
-    def gettrace(self, traceType):
+    def gettrace(self, traceType, force=False):
 
         choices=['Action', 'AutoDriveClean', 'AutoSupport', 'BackgroundClient',
                  'CAN', 'Connection', 'Encryption', 'Error', 'EtherLib',
@@ -2101,21 +2101,23 @@ class SpectraLogicAPI:
             xmldoc = self.run_command(url, returnstring=True)
 
             # Write the data to a file in the current working directory.
-            # The name of the file is the same as the trace type with an
-            # underscore and the date appended to it along with a unique
-            # sequential number. (e.g. CAN_2018-11-13_2)
-            from datetime import date
-            filename = choice + "_" + str(date.today())
-            count = 1
-            findUniqueName = True
-            while True:
-                tempFilename = filename + "_" + str(count)
-                if (os.path.exists(tempFilename)):
-                    count = count + 1
-                    continue
-                else:
-                    filename = tempFilename
-                    break
+            filename = choice
+            if force == False:
+                # The name of the file is the same as the trace type with an
+                # underscore and the date appended to it along with a unique
+                # sequential number. (e.g. CAN_2018-11-13_2)
+                from datetime import date
+                filename = choice + "_" + str(date.today())
+                count = 1
+                findUniqueName = True
+                while True:
+                    tempFilename = filename + "_" + str(count)
+                    if (os.path.exists(tempFilename)):
+                        count = count + 1
+                        continue
+                    else:
+                        filename = tempFilename
+                        break
             f = open(filename, 'wb')
             f.write(xmldoc)
             f.close()
@@ -5101,6 +5103,8 @@ def main():
     gettrace_parser = cmdsubparsers.add_parser('gettrace',
         help='Returns the ASCII formatted data for the type of trace          \
               specified by the command.')
+    gettrace_parser.add_argument('--force', '-f', action='store_true',
+                                 help='Overwrite the previous trace')
     gettrace_parser.add_argument('gettrace',
         action='store',
         type=str.lower,
@@ -5342,7 +5346,7 @@ def main():
         elif args.command == "gettapstate":
             slapi.gettapstate()
         elif args.command == "gettrace":
-            slapi.gettrace(args.gettrace)
+            slapi.gettrace(args.gettrace, args.force)
         elif args.command == "hhmdata":
             slapi.hhmdata()
         elif args.command == "inventoryaudit":

@@ -5400,7 +5400,7 @@ def main():
             elif args.subcommand == "abort":
                 slapi.securityauditabort()
             elif args.subcommand == "monitor":
-                slapi.securityauditmonitor(sleeping)
+                slapi.securityauditmonitor(args.sleep)
             elif args.subcommand == "status":
                 slapi.securityauditstatus(False)
             else:

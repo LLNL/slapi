@@ -4509,7 +4509,6 @@ class SpectraLogicAPI:
     # running or reports a failure status.
     #
     def securityauditmonitor(self, sleep):
-
         try:
             status = "OK"
             while (status != "FAILURE"):

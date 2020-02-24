@@ -4508,8 +4508,7 @@ class SpectraLogicAPI:
     # Every 5 seconds poll the securityaudit status until the audit is not
     # running or reports a failure status.
     #
-    def securityauditmonitor(self):
-
+    def securityauditmonitor(self, sleep):
         try:
             status = "OK"
             while (status != "FAILURE"):
@@ -4519,7 +4518,7 @@ class SpectraLogicAPI:
                 sys.stdout.flush()
                 if (message == "Security audit is not running."):
                     break
-                time.sleep(5)   # sleep before next poll
+                time.sleep(sleep)   # sleep before next poll
 
         except Exception as e:
             raise
@@ -5222,7 +5221,10 @@ def main():
               of the library. This command was added with BlueScale 12.8.01.')
     securityaudit_monitor_parser = securityaudit_subparser.add_parser('monitor',
         help='Every 5 seconds poll the securityaudit status until the audit   \
-              is not running or reports failure.')
+              is not running or reports failure. You can also use --sleep with \
+              poll time in seconds after the monitor keyword')
+    securityaudit_monitor_parser.add_argument('--sleep', help="Set the polling \
+              interval in seconds", default=5, required=False, type=int)
     securityaudit_start_parser = securityaudit_subparser.add_parser('start',
         help='Begin a Security Audit which is a physical audit of the entire  \
               library. This command was added with BlueScale 12.8.01.')
@@ -5398,7 +5400,7 @@ def main():
             elif args.subcommand == "abort":
                 slapi.securityauditabort()
             elif args.subcommand == "monitor":
-                slapi.securityauditmonitor()
+                slapi.securityauditmonitor(args.sleep)
             elif args.subcommand == "status":
                 slapi.securityauditstatus(False)
             else:

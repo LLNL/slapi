@@ -32,6 +32,7 @@ import xml.etree.ElementTree
 import xml.dom.minidom
 import traceback
 import datetime
+import re
 
 class SpectraLogicLoginError(Exception):
 
@@ -3733,6 +3734,58 @@ class SpectraLogicAPI:
 
     #--------------------------------------------------------------------------
     #
+    # Returns a list of all active option keys currently entered in the library.
+    #
+    def optionkeyslist(self):
+
+        listFormat = '{:30} {:60} {:12} {:14}'
+        totalchambers = 0
+
+        try:
+            url  = self.baseurl + "/optionKeys.xml?action=list"
+            tree = self.run_command(url)
+            print(listFormat.format("Option Key", "Description", "Action", "Days Remaining"))
+            print(listFormat. \
+                format("----------",
+                       "-----------",
+                       "------",
+                       "--------------"))
+            for optionkey in tree:
+                keyvalue = description = action = daysremaining = ""
+                for item in optionkey:
+                    if item.tag == "keyValue":
+                        keyvalue = item.text.rstrip()
+                    elif item.tag == "description":
+                        description = item.text.rstrip()
+                    elif item.tag == "action":
+                        action = item.text.rstrip()
+                    elif item.tag == "action":
+                        action = item.text.rstrip()
+                    elif item.tag == "daysRemaining":
+                        daysremaining = item.text.rstrip()
+
+                # Match a line like:
+                # Capacity License: 995 Chambers
+                match = re.search("Capacity License:\s+(\d+)\s+Chambers", description)
+                if match:
+                    newchambers   = match.group(1)
+                    if action == "ADD":
+                        totalchambers = totalchambers + int(newchambers)
+                    elif action == "OVERWRITE":
+                        totalchambers = int(newchambers)
+                print(listFormat.format(keyvalue, description, action, daysremaining))
+                sys.stdout.flush()
+
+            print("")
+            print("Total Licensed Chambers: " + str(totalchambers))
+            sys.stdout.flush()
+                    
+
+        except Exception as e:
+            raise(e)
+
+    #--------------------------------------------------------------------------
+    #
     # Display the current firmware version installed on individual components
     # in the library along with the firmware version included in the currently
     # installed BlueScale package version.
@@ -5150,6 +5203,12 @@ def main():
         help='Returns a list of the current Media Lifecycle Management (MLM)  \
               settings.')
 
+    optionkeys_parser = cmdsubparsers.add_parser('optionkeys',
+        help='optionkeys command help')
+    optionkeys_subparser    = optionkeys_parser.add_subparsers(title="subcommands", dest="subcommand")
+    optionkeys_list_parser  = optionkeys_subparser.add_parser('list', help='Returns a list of all active option keys' +
+                                                                      'currently entered in the library')
+
     package_parser = cmdsubparsers.add_parser('package',
         help='package command help.')
     package_subparser       = package_parser.add_subparsers(title="subcommands", dest="subcommand")
@@ -5365,6 +5424,11 @@ def main():
             slapi.librarystatus2()
         elif args.command == "mlmsettings":
             slapi.mlmsettings()
+        elif args.command == "optionkeys":
+            if args.subcommand is None or args.subcommand == "list":
+                slapi.optionkeyslist()
+            else:
+                raise(Exception("optionkeys: Unknown option " + args.subcommand))
         elif args.command == "package":
             if args.subcommand is None or args.subcommand == "list":
                 slapi.packagelist()

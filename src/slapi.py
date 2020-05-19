@@ -17,6 +17,7 @@
 # this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import argparse
+import functools
 import sys
 import os
 import stat
@@ -456,8 +457,7 @@ class SpectraLogicAPI:
                 print("OK")
                 sys.stdout.flush()
             except Exception as e:
-                raise(Exception("inventory audit progress Error: " + str(e),
-                                file=sys.stderr))
+                raise(Exception("inventory audit progress Error: " + str(e)))
         except Exception as e:
             raise(e)
 
@@ -474,7 +474,9 @@ class SpectraLogicAPI:
             url = self.baseurl + "/" + command + ".xml?progress"
             tree = self.run_command(url)
             statusRec = tree.find("status")
+            messageRec = tree.find("message")
             status = statusRec.text.strip()
+            message = messageRec.text.strip()
             if (status == "OK"):
                 if verbose:
                     print("The '" + command +
@@ -483,7 +485,8 @@ class SpectraLogicAPI:
                     sys.stdout.flush()
                 return(True)
             elif (status == "FAILED"):
-                errorText = "Error: The '" + command + "' command FAILED"
+                errorText  = "Error: The '" + command + "' command FAILED\n"
+                errorText += message
                 raise(Exception(errorText))
             else:
                 if verbose:
@@ -845,8 +848,7 @@ class SpectraLogicAPI:
                     # wait 1 seconds before retrying
                     time.sleep(1)
             except Exception as e:
-                raise(Exception("etherLibStatus refresh progress Error: " + str(e),
-                                file=sys.stderr))
+                raise(Exception("etherLibStatus refresh progress Error: " + str(e)))
 
             print("\nThe etherLibStatus refresh command has completed.")
             sys.stdout.flush()
@@ -1014,7 +1016,7 @@ class SpectraLogicAPI:
                     time.sleep(1)
             except Exception as e:
                 raise(Exception("autosupport generateASL progress Error: " +  \
-                                str(e), file=sys.stderr))
+                                str(e)))
 
             print("\nThe autosupport generateASL command has completed.")
             sys.stdout.flush()
@@ -1082,8 +1084,7 @@ class SpectraLogicAPI:
                     time.sleep(1)
             except Exception as e:
                 raise(Exception(
-                    "driveList generateDriveTraces progress Error: " + str(e),
-                    file=sys.stderr))
+                    "driveList generateDriveTraces progress Error: " + str(e)))
 
             print("\nThe driveList generateDriveTraces command has completed.")
             sys.stdout.flush()
@@ -4312,8 +4313,7 @@ class SpectraLogicAPI:
                     # wait 1 seconds before retrying
                     time.sleep(1)
             except Exception as e:
-                raise(Exception("driveList resetDrive progress Error: " + str(e),
-                                file=sys.stderr))
+                raise(Exception("driveList resetDrive progress Error: " + str(e)))
 
             print("\nThe driveList resetDrive command has completed.")
             sys.stdout.flush()
@@ -4414,6 +4414,66 @@ class SpectraLogicAPI:
                 print("Status: " + status.text.rstrip())
                 print("Message: " + message.text.rstrip())
                 sys.stdout.flush()
+
+        except Exception as e:
+            raise(e)
+
+
+    #--------------------------------------------------------------------------
+    #
+    # Move the robot to/from the service bay based on the action parameter.
+    # The acion parameter may be one of "progress", "toservicebay", or
+    # "fromservicebay"
+    #
+    # The robot being moved is specified as "1" (the left robot) or "2" (the
+    # right robot) when facing the front of the library.
+    #
+    # The caller may choose to poll to wait for the operation to complete.
+    #
+    def robotservice(self, action, robot, poll=None):
+
+        try:
+            url  = self.baseurl + "/robotService.xml?"
+
+            if action.lower() == "progress":
+                url = url + "progress"
+            elif action.lower() == "fromservicebay":
+                url = url + "action=returnFromService&"
+            elif action.lower() == "toservicebay":
+                url = url + "action=sendToService&"
+            else:
+                raise(Exception("Error: Invalid robotservice action " + action))
+
+            if action.lower() == "fromservicebay" or action.lower() == "toservicebay":
+                if (robot is not None) and (robot == "1" or robot == "2"):
+                    url = url + "robot=" + robot
+                else:
+                    raise(Exception("Error: Invalid robotservice robot number"))
+
+            tree = self.run_command(url)
+            status  = None
+            message = None
+            for child in tree:
+                if child.tag == "status":
+                    status = child.text.rstrip()
+                if child.tag == "message":
+                    message = child.text.rstrip()
+ 
+            if action.lower() == "progress" or poll is None:
+                print(f"Status: {status}")
+                print(f"Message: {message}")
+                sys.stdout.flush()
+            else:
+                # poll for robotservice to complete
+                try:
+                    while (not self.check_command_progress("robotService", False)):
+                        # put out an in progress 'dot'
+                        print(".", end='')
+                        sys.stdout.flush()
+                        # wait 1 seconds before retrying
+                        time.sleep(poll)
+                except Exception as e:
+                    raise(Exception("robotservice progress Error: " + str(e)))
 
         except Exception as e:
             raise(e)
@@ -4814,8 +4874,7 @@ class SpectraLogicAPI:
                 sys.stdout.flush()
             except Exception as e:
                 raise(Exception(
-                    "Verify magazine barcodes utils progress Error: " + str(e),
-                    file=sys.stderr))
+                    "Verify magazine barcodes utils progress Error: " + str(e)))
 
         except Exception as e:
             raise(e)
@@ -4981,6 +5040,19 @@ class SpectraLogicAPI:
             raise(Exception("create_audit_results_XML_records Error creating XML"))
 
         return(inventory)
+
+
+def check_range(arg, minval, maxval):
+
+    try:
+        value = int(arg)
+    except ValueError as err:
+       raise argparse.ArgumentTypeError(str(err))
+
+    if value < minval or value > maxval:
+        raise(argparse.ArgumentTypeError(f"Sleep argument expected to be between {minval} and {maxval} inclusive."))
+
+    return value
 
 
 #==============================================================================
@@ -5270,6 +5342,36 @@ def main():
         type=str.lower,
         choices=['1', '2'])
 
+    robotservice_parser = cmdsubparsers.add_parser('robotservice',
+        help='Send robot to/from service bay.')
+    robotservice_sleep_checkrange    = functools.partial(check_range, minval=5, maxval=120)
+    robotservice_subparser           = robotservice_parser.add_subparsers(title="subcommands", dest="subcommand")
+    robotservice_progress_parser     = robotservice_subparser.add_parser('progress', help='Get the progress of the robot service command')
+    robotservice_toservicebay_parser = robotservice_subparser.add_parser('toservicebay', help='Send robot to the service bay')
+    robotservice_toservicebay_parser.add_argument('--sleep',
+        help="Set the polling interval in seconds",
+        default=None,
+        required=False,
+        type=robotservice_sleep_checkrange)
+    robotservice_toservicebay_parser.add_argument('robot',
+        action='store',
+        type=str.lower,
+        default=None,
+        choices=['1', '2'],
+        help='Left robot (1) or right robot (2) when facing the front of the library.')
+    robotservice_fromservicebay_parser = robotservice_subparser.add_parser('fromservicebay', help='Get robot from the service bay')
+    robotservice_fromservicebay_parser.add_argument('--sleep',
+        help="Set the polling interval in seconds",
+        default=None,
+        required=False,
+        type=robotservice_sleep_checkrange)
+    robotservice_fromservicebay_parser.add_argument('robot',
+        action='store',
+        type=str.lower,
+        default=None,
+        choices=['1', '2'],
+        help='Left robot (1) or right robot (2) when facing the front of the library.')
+
     securityaudit_parser = cmdsubparsers.add_parser('securityaudit',
         help='securityaudit command help')
     securityaudit_subparser = securityaudit_parser.add_subparsers(
@@ -5458,6 +5560,11 @@ def main():
             slapi.resethhmcounter(args.resethhmcounter,
                                   args.subType,
                                   args.robot)
+        elif args.command == "robotservice":
+            if args.subcommand is None or args.subcommand == "progress":
+                slapi.robotservice(action="progress", robot=None, poll=None)
+            else:
+                slapi.robotservice(action=args.subcommand, robot=args.robot, poll=args.sleep)
         elif args.command == "securityaudit":
             if args.subcommand is None or args.subcommand == "start":
                 slapi.securityaudit()

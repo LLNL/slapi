@@ -758,7 +758,9 @@ class SpectraLogicAPI:
                     elif element.tag == "driveType":
                         driveType = element.text.rstrip()
                     elif element.tag == "serialNumber":
-                        serialNum = element.text.rstrip()
+                        serialNum = ""
+                        if element.text is not None:
+                            serialNum = element.text.rstrip()
                     elif element.tag == "manufacturerSerialNumber":
                         manuSerialNum = element.text.rstrip()
                     elif element.tag == "driveFirmware":
@@ -766,10 +768,12 @@ class SpectraLogicAPI:
                     elif element.tag == "dcmFirmware":
                         dcmFW = element.text.rstrip()
                     elif element.tag == "wwn":
-                        wwn = element.text.rstrip()
-                        # make the wwn's pretty for Todd; he likes colons better
-                        # than the default space delimiters.
-                        prettyWWN = wwn.replace(" ", ":")
+                        wwn = ""
+                        if element.text is not None:
+                            wwn = element.text.rstrip()
+                            # make the wwn's pretty for Todd; he likes colons better
+                            # than the default space delimiters.
+                            prettyWWN = wwn.replace(" ", ":")
                     elif element.tag == "fibreAddress":
                         fibreAddress = element.text.rstrip()
                     elif element.tag == "loopNumber":

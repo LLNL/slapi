@@ -542,7 +542,7 @@ class SpectraLogicAPI:
     def check_security_audit_in_progress(self):
 
         try:
-            status, message = self.securityauditstatus(True)
+            is_running, status, message = self.securityauditstatus(True)
         except Exception as e:
             if (self.verbose):
                 print("check_security_audit_command_progress Error: " + str(e),
@@ -550,10 +550,7 @@ class SpectraLogicAPI:
                 traceback.print_exc()
             raise(e)
 
-        if (message == "Security audit is not running."):
-            return (False)
-        else:
-            return (True)
+        return(is_running)
 
 
     #--------------------------------------------------------------------------
@@ -4592,11 +4589,13 @@ class SpectraLogicAPI:
     # Determine the progress of a Security Audit (physical audit) of the
     # library.
     #
-    # Returns two strings:
-    #     status    indicates the status of the security audit
-    #               (e.g. FAILURE, OK, etc)
-    #     message   The message about the state/progress of the security audit
-    #               (e.g. Security audit is not running.)
+    # Returns three items:
+    #     is_running  Boolean value that indicates whether the audit is running
+    #                 or not.
+    #     status      String that indicates the status of the security audit
+    #                 (e.g. FAILURE, OK, etc)
+    #     message     String about the state/progress of the security audit
+    #                 (e.g. Security audit is not running.)
     # Indicating the status/progress of the security audit.
     #
     # If quiet=False, then prints the "<status> :: <message> to stdout
@@ -4604,7 +4603,11 @@ class SpectraLogicAPI:
     # Notes:
     #     * The securityAudit.xml command was added with BlueScale 12.8.01.
     #     * A return message of "Security audit is not running." indicates that
-    #       the security audit is not running.
+    #     * the security audit is not running.
+    #     * Also note that newer BlueScale versions modified the case on the
+    #     * string to "Security Audit is not running."
+    #     * We were looking for the string in multiple places and really should
+    #     * have been doing a case insensitive search.
     #
     def securityauditstatus(self, quiet):
 
@@ -4623,7 +4626,10 @@ class SpectraLogicAPI:
                 if not quiet:
                     print(status + " :: " + message)
                     sys.stdout.flush()
-                return(status, message)
+                is_running = True
+                if (message.casefold() == "Security audit is not running.".casefold()):
+                    is_running = False
+                return(is_running, status, message)
 
         except Exception as e:
             raise
@@ -4636,14 +4642,17 @@ class SpectraLogicAPI:
     #
     def securityauditmonitor(self, sleep):
         try:
-            status = "OK"
-            while (status != "FAILURE"):
-                status, message = self.securityauditstatus(True) # quiet
+            is_running = True
+            while is_running == True:
+                is_running, status, message = self.securityauditstatus(True) # quiet
                 print(str(datetime.datetime.now()) +
                       " :: " + status + " :: " + message)
                 sys.stdout.flush()
-                if (message == "Security audit is not running."):
+
+                # break out of loop if status comes back as a failure
+                if status == "FAILURE":
                     break
+                
                 time.sleep(sleep)   # sleep before next poll
 
         except Exception as e:

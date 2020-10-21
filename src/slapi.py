@@ -4007,8 +4007,15 @@ class SpectraLogicAPI:
                 raise(Exception(filename + " does not exist."))
             if os.path.isfile(filename) == False:
                 raise(Exception(filename + " is not a file."))
-            if not filename.endswith(".hps"):
-                raise(Exception(filename + " is not a valid .hps file."))
+            if not filename.endswith(".hps") and \
+               not filename.endswith(".dls") and \
+               not filename.endswith(".dts"):
+                errorstring = filename + " is not a valid package file.\n" +\
+                              "Valid extensions:\n" +\
+                              ".hps\n" +\
+                              ".dls\n" +\
+                              ".dts"
+                raise(Exception(errorstring))
 
             url  = self.baseurl + "/packageUpload.xml"
             tree = self.run_command(url, filename=filename)

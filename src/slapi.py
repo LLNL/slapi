@@ -804,12 +804,21 @@ class SpectraLogicAPI:
                                             " %Staged=" + percentStaged + \
                                             " committing=" + committing
 
-                print(driveFormat. \
-                    format(myid, status, partition, paritionDriveNum, driveType,
-                           serialNum, manuSerialNum, driveFW,
-                           dcmFW, prettyWWN, fibreAddress, loopNum, health, loadCount,
-                           sparedWith, spareFor, sparePotential,
-                           firmwareStaging) )
+                if extended:
+                    print(driveFormat. \
+                        format(myid, status, partition, paritionDriveNum, driveType,
+                               serialNum, manuSerialNum, driveFW,
+                               dcmFW, prettyWWN, fibreAddress, loopNum, health, loadCount,
+                               sparedWith, spareFor, sparePotential,
+                               firmwareStaging) )
+                else:
+                    print(driveFormat. \
+                        format(myid, status, partition, paritionDriveNum, driveType,
+                               serialNum, manuSerialNum, driveFW,
+                               dcmFW, prettyWWN, fibreAddress, loopNum, health,
+                               sparedWith, spareFor, sparePotential,
+                               firmwareStaging) )
+                    
                 sys.stdout.flush()
 
         except Exception as e:

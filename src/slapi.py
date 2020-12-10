@@ -4633,8 +4633,11 @@ class SpectraLogicAPI:
                 if not quiet:
                     print(status + " :: " + message)
                     sys.stdout.flush()
+
                 is_running = True
-                if (message.casefold() == "Security audit is not running.".casefold()):
+                match_completed = re.search("Security audit completed", message, re.IGNORECASE)
+                match_notrunning = re.search("Security audit is not running.", message, re.IGNORECASE)
+                if match_completed or match_notrunning:
                     is_running = False
                 return(is_running, status, message)
 

@@ -4635,9 +4635,10 @@ class SpectraLogicAPI:
                     sys.stdout.flush()
 
                 is_running = True
-                match_completed = re.search("Security audit completed", message, re.IGNORECASE)
+                match_completed  = re.search("Security audit completed", message, re.IGNORECASE)
                 match_notrunning = re.search("Security audit is not running.", message, re.IGNORECASE)
-                if match_completed or match_notrunning:
+                match_aborted    = re.search("Security audit aborted", message, re.IGNORECASE)
+                if match_completed or match_notrunning or match_aborted:
                     is_running = False
                 return(is_running, status, message)
 

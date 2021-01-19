@@ -119,13 +119,20 @@ class SpectraLogicAPI:
     def get_all_text(self, element, inputString):
 
         # add the name of the element
-        outputString = inputString + element.tag
+        outputString = inputString
 
         # add the text of the element; "None" if no text
+        # if the tag is a line, then just print out the line.
         if element.text:
-            outputString = outputString + ": " + element.text.rstrip()
+            if element.tag != "line":
+                outputString = outputString + element.tag + ": " + element.text.rstrip()
+            else:
+                outputString = outputString + element.text.rstrip()
         else:
-            outputString = outputString + ": None"
+            if element.tag != "line":
+                outputString = outputString + element.tag + ": None"
+            else:
+                outputString =  outputString + ": None"
         outputString = outputString + "\n"
 
         # recurse to the next level of elements
@@ -2374,7 +2381,7 @@ class SpectraLogicAPI:
     #
     def inventorylist(self, partition, header=True):
 
-        listFormat = '{:15} {:13} {:6} {:6} {:10} {:6} {:4}'
+        listFormat = '{:15} {:13} {:6} {:6} {:10} {:6} {:4} {:10} {:12}'
 
         try:
             url       = self.baseurl + "/inventory.xml?action=list&partition=" + partition
@@ -2390,15 +2397,19 @@ class SpectraLogicAPI:
                 if header:
                     print(listFormat.
                         format("Partition", "SlotType", "ID", "Offset",
-                               "Barcode", "Queued", "Full"))
+                               "Barcode", "Queued", "Full", "SourceSlot",
+                               "SourceOffset"))
                     print(listFormat.
                         format("---------------", "-------------", "------",
-                               "------", "----------", "------", "----"))
+                               "------", "----------", "------", "----",
+                               "----------", "------------"))
                     sys.stdout.flush()
                 for elt in part:
                     if elt.tag != "name":
                         myid = ""
                         offset = ""
+                        sourceslot = ""
+                        sourceoffset = ""
                         barcode = ""
                         isqueued = ""
                         full = ""
@@ -2408,6 +2419,10 @@ class SpectraLogicAPI:
                                 myid = slot.text.rstrip()
                             elif slot.tag == "offset":
                                 offset = slot.text.rstrip()
+                            elif slot.tag == "sourceSlot":
+                                sourceslot = slot.text.rstrip()
+                            elif slot.tag == "sourceOffset":
+                                sourceoffset = slot.text.rstrip()
                             elif slot.tag == "barcode":
                                 barcode = slot.text.strip()
                             elif slot.tag == "isQueued":
@@ -2416,12 +2431,76 @@ class SpectraLogicAPI:
                                 full = slot.text.rstrip()
                         print(listFormat. \
                             format(partition, mediaPool, myid, offset, barcode,
-                                   isqueued, full))
+                                   isqueued, full, sourceslot, sourceoffset))
                         sys.stdout.flush()
 
         except Exception as e:
             raise(e)
 
+
+    #--------------------------------------------------------------------------
+    #
+    #
+    # Add the ability to move cartridges to/from storage slot, ee, or drive
+    #
+    # partition - names the partition the tape will move within eg. 'NERF-TS'
+    # barcode   - the barcode for the source tape eg. 'NP0000JD'
+    # desttype  - the destination slot type. One of:
+    #             'slot'  (storage slot)
+    #             'ee'    (entry/exit slot)
+    #             'drive' (tape drive)
+    # destnum   - the destination number/offset.
+    #
+    def inventorymove(self, partition, barcode, desttype, destnum):
+
+        try:
+            url  = self.baseurl +\
+                   "/inventory.xml?action=move&partition=" + partition +\
+                   "&sourceID=BC" + "&sourceNumber=" + barcode +\
+                   "&destinationID=" + desttype.upper() +\
+                   "&destinationNumber=" + destnum
+            tree = self.run_command(url)
+
+            # get the immediate response
+            status = "OK"
+            for child in tree:
+                if child.tag == "status":
+                    status = child.text.rstrip()
+                elif child.tag == "message":
+                    message = child.text.rstrip()
+            if status == "OK":
+                print("The inventory move command has been submitted: " +
+                      message)
+                sys.stdout.flush()
+
+            # poll for inventory move to be done
+            try:
+                while (not self.check_command_progress("inventory", False)):
+                    # put out an in progress 'dot'
+                    print(".", end='')
+                    sys.stdout.flush()
+                    # wait 1 seconds before retrying
+                    time.sleep(5)
+            except Exception as e:
+                raise(Exception("inventory move progress Error: " + str(e)))
+
+            url = self.baseurl +\
+                  "/inventory.xml?action=getMoveResult&partition=" + partition
+            tree = self.run_command(url)
+
+            # get the immediate response
+            outstr = self.get_all_text(tree, "")
+            outstr = re.sub(" +", " ", outstr)
+            outstr = re.sub("\n\s+", "\n", outstr)
+            match  = re.search("(error|fail)", outstr, re.IGNORECASE)
+            if match:
+                raise(Exception("inventory move failed: " + outstr))
+
+            print("\nThe inventory move command has completed.")
+            sys.stdout.flush()
+
+        except Exception as e:
+            raise(e)
 
     #--------------------------------------------------------------------------
     #
@@ -5294,6 +5373,18 @@ def main():
     inventorylist_parser.add_argument('partition', action='store',
         help='Spectra Logic Partition')
 
+    inventorymove_parser = cmdsubparsers.add_parser('inventorymove',
+        help='Move a cartridge to/from a drive.')
+    inventorymove_parser.add_argument('partition', action='store',
+        help='Spectra Logic Partition')
+    inventorymove_parser.add_argument('barcode', action='store',
+        help='Cartridge barcode to move')
+    inventorymove_parser.add_argument('desttype', action='store',
+        type=str.lower, default=None, choices=['slot', 'ee', 'drive'],
+        help='Destination type')
+    inventorymove_parser.add_argument('destnum', action='store',
+        help='Destination number')
+
     librarysettingslist_parser = cmdsubparsers.add_parser('librarysettingslist',
         help='Returns a list of the current library settings.')
 
@@ -5551,6 +5642,8 @@ def main():
             slapi.inventoryall()
         elif args.command == "inventorylist":
             slapi.inventorylist(args.partition)
+        elif args.command == "inventorymove":
+            slapi.inventorymove(args.partition, args.barcode, args.desttype, args.destnum)
         elif args.command == "librarysettingslist":
             slapi.librarysettingslist()
         elif args.command == "librarystatus":

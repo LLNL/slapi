@@ -2381,7 +2381,7 @@ class SpectraLogicAPI:
     #
     def inventorylist(self, partition, header=True):
 
-        listFormat = '{:15} {:13} {:6} {:6} {:10} {:6} {:4} {:10} {:12}'
+        listFormat = '{:15} {:13} {:6} {:6} {:10} {:6} {:4} {:10} {:12} {:10} {:9}'
 
         try:
             url       = self.baseurl + "/inventory.xml?action=list&partition=" + partition
@@ -2398,21 +2398,24 @@ class SpectraLogicAPI:
                     print(listFormat.
                         format("Partition", "SlotType", "ID", "Offset",
                                "Barcode", "Queued", "Full", "SourceSlot",
-                               "SourceOffset"))
+                               "SourceOffset", "CleanTotal", "CleanLeft"))
                     print(listFormat.
                         format("---------------", "-------------", "------",
                                "------", "----------", "------", "----",
-                               "----------", "------------"))
+                               "----------", "------------", "----------",
+                               "---------"))
                     sys.stdout.flush()
                 for elt in part:
                     if elt.tag != "name":
                         myid = ""
                         offset = ""
-                        sourceslot = ""
-                        sourceoffset = ""
                         barcode = ""
                         isqueued = ""
                         full = ""
+                        sourceslot = "N/A"
+                        sourceoffset = "N/A"
+                        cleantotal = "N/A"
+                        cleanleft = "N/A"
                         mediaPool = elt.tag.rstrip()
                         for slot in elt:
                             if slot.tag == "id":
@@ -2429,9 +2432,14 @@ class SpectraLogicAPI:
                                 isqueued = slot.text.rstrip()
                             elif slot.tag == "full":
                                 full = slot.text.rstrip()
+                            elif slot.tag == "cleaningCyclesTotal":
+                                cleantotal = slot.text.rstrip()
+                            elif slot.tag == "cleaningCyclesLeft":
+                                cleanleft = slot.text.rstrip()
                         print(listFormat. \
                             format(partition, mediaPool, myid, offset, barcode,
-                                   isqueued, full, sourceslot, sourceoffset))
+                                   isqueued, full, sourceslot, sourceoffset,
+                                   cleantotal, cleanleft))
                         sys.stdout.flush()
 
         except Exception as e:

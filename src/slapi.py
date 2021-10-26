@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 #
 # Copyright (C) 2019 Lawrence Livermore National Security, LLC
 # Please see top-level LICENSE for details.
@@ -17,6 +17,7 @@
 # this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import argparse
+import getpass
 import functools
 import sys
 import os
@@ -52,20 +53,24 @@ class SpectraLogicAPI:
     #--------------------------------------------------------------------------
     #
     def __init__(self, args):
-        self.server     = args.server
-        self.user       = args.user
-        self.passwd     = args.passwd
-        self.verbose    = args.verbose
-        self.insecure   = args.insecure
-        self.longlist   = args.longlist
-        self.loggedin   = False
-        self.sessionid  = ""
-        self.cookiefile = self.slapi_directory() + "/cookies.txt"
-        self.cookiejar  = http.cookiejar.LWPCookieJar()
+        self.server      = args.server
+        self.port        = args.port
+        self.user        = args.user
+        self.passwd      = args.passwd
+        self.verbose     = args.verbose
+        self.insecure    = args.insecure
+        self.longlist    = args.longlist
+        self.loggedin    = False
+        self.sessionid   = ""
+        self.cookiefile  = self.slapi_directory() + "/cookies.txt"
+        self.cookiejar   = http.cookiejar.LWPCookieJar()
         self.load_cookie()
-        self.baseurl    = "https://" + args.server + "/gf"
-        if self.insecure:
-            self.baseurl    = "http://" + args.server + "/gf"
+        httpstr = "https://"
+        if args.insecure == True:
+            httpstr = "http://"
+        self.baseurl = httpstr + args.server + "/gf"
+        if args.port is not None:
+            self.baseurl = httpstr + args.server + ":" + str(args.port) + "/gf"
 
 
     #--------------------------------------------------------------------------
@@ -299,8 +304,7 @@ class SpectraLogicAPI:
             # or AES as these do overlap with the aNULL ciphers. When in doubt,
             # include !aNULL in your cipherlist.
 
-            #cipherstr = 'HIGH:!aNULL:!eNULL'
-            cipherstr = 'MEDIUM:!aNULL:!eNULL'
+            cipherstr = 'HIGH:MEDIUM:!aNULL:!eNULL'
 
             context = ssl._create_unverified_context()
             context.set_ciphers(cipherstr)
@@ -5180,6 +5184,9 @@ def check_range(arg, minval, maxval):
 #==============================================================================
 def main():
 
+    # Define defaults here
+    default_configfile = "/etc/slapi.conf"
+
     cmdparser     = argparse.ArgumentParser(description='Spectra Logic TFinity API Tool.')
     cmdsubparsers = cmdparser.add_subparsers(title="commands", dest="command")
 
@@ -5194,23 +5201,31 @@ def main():
                            difficult to parse.')
 
     cmdparser.add_argument('--insecure', '-i', dest='insecure', action='store_true',
-                           help='Talk to library over http:// instead of https://')
+                           help='Communicate with library over http:// instead of https://')
 
     cmdparser.add_argument('--config', '-c', dest='configfile', nargs='?',
-                           type=argparse.FileType('r'), default='/etc/slapi.conf',
-                           help='Configuration file for Spectra Logic API..')
+                           type=str, required=False, default=default_configfile,
+                           help='Configuration file for Spectra Logic API.')
 
     cmdparser.add_argument('--server', '-s', dest='server',
                            required=True,
-                           help='IP Address/Hostname of Spectra Logic Library.')
+                           help='Hostname/IP Address of Spectra Logic Library.')
+
+    cmdparser.add_argument('--port', '-P', dest='port',
+                           type=int, required=False,
+                           help='Port to connect to for bluescale.')
 
     cmdparser.add_argument('--user', '-u', dest='user',
                            help='User name for Spectra Logic Library Login.')
 
-    cmdparser.add_argument('--passwd', '-p', dest='passwd',
-                           help='Password for Spectra Logic Library Login. ' +
-                                'Do not use this option if you care about security. ' +
-                                'Specify the password in the config file instead.')
+    pwaction = cmdparser.add_mutually_exclusive_group(required = False)
+    pwaction.add_argument('--insecure-passwd', '-I', dest='passwd',
+                          help='Password for Spectra Logic Library Login. ' +
+                               'Do not use this option if you care about security. ' +
+                               'Specify the password in the config file instead.')
+
+    pwaction.add_argument('--passwd', '-p', dest='passwd_prompt', action='store_true',
+                          help='Prompt user for password to Spectra Logic Library.')
 
 
     controllerslist_parser = cmdsubparsers.add_parser('controllerslist',
@@ -5548,14 +5563,19 @@ def main():
               added since the last inventory.')
 
     args = cmdparser.parse_args()
+    if args.passwd_prompt:
+        args.passwd = getpass.getpass()
 
-    if args.configfile is not None and args.configfile.name is not None:
+    if args.configfile is not None:
 
-        if args.configfile.name == "":
-            raise(Exception("Error: CONFIGFILE not specified"))
+        if args.configfile == default_configfile and os.access(args.configfile, os.R_OK) is False:
+            pass
+        elif os.access(args.configfile, os.R_OK) is False:
+            print("Cannot access configfile " + args.configfile, file=sys.stderr)
+            sys.exit(1)
 
         cfgparser = configparser.ConfigParser()
-        cfgparser.read(args.configfile.name)
+        cfgparser.read(args.configfile)
 
         try:
             config = cfgparser[args.server]
@@ -5571,10 +5591,13 @@ def main():
                     args.passwd = config["password"]
             if args.insecure is None or args.insecure == False:
                 if config.get("insecure"):
-                    args.insecure = config["insecure"]
+                    args.insecure = config.getboolean("insecure")
             if args.verbose is None or args.verbose == False:
                 if config.get("verbose"):
-                    args.verbose = config["verbose"]
+                    args.verbose = config.getboolean("verbose")
+            if args.port is None:
+                if config.get("port"):
+                    args.port    = config.getint("port")
 
         except Exception as e:
             print(str(e))

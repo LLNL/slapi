@@ -2427,7 +2427,9 @@ class SpectraLogicAPI:
                             elif slot.tag == "sourceOffset":
                                 sourceoffset = slot.text.rstrip()
                             elif slot.tag == "barcode":
-                                barcode = slot.text.strip()
+                                barcode = "N/A"
+                                if slot.text:
+                                    barcode = slot.text.strip()
                             elif slot.tag == "isQueued":
                                 isqueued = slot.text.rstrip()
                             elif slot.tag == "full":

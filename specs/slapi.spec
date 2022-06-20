@@ -7,6 +7,7 @@ Group:         System Environment/Base
 Source:        %{name}-%{version}.tar
 BuildRoot:     %{_tmppath}/%{name}-%{version}-%{release}-root
 ExclusiveArch: x86_64
+BuildRequires: python3-rpm-macros
 BuildRequires: python(abi) >= %{python3_version}
 Requires:      python(abi) >= %{python3_version}
 Requires:      python%{python3_version}dist(requests)

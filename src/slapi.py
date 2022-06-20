@@ -2563,29 +2563,29 @@ class SpectraLogicAPI:
             automaticPowerUpAfterPowerFailureEnabled = ""
 
             libraryNameRec = tree.find("libraryName")
-            if ( (libraryNameRec is not None) and (len(libraryNameRec) > 0) ):
+            if ( (libraryNameRec is not None) and (len(libraryNameRec.text.strip()) > 0) ):
                 libraryName = libraryNameRec.text.strip()
 
             autoLogoutTimeoutInMinutesRec = tree.find("autoLogoutTimeoutInMinutes")
             if ( (autoLogoutTimeoutInMinutesRec is not None) and
-                 (len(autoLogoutTimeoutInMinutesRec) > 0) ):
+                 (len(autoLogoutTimeoutInMinutesRec.text.strip()) > 0) ):
                 autoLogoutTimeoutInMinutes = autoLogoutTimeoutInMinutesRec.text.strip()
 
             onlineAccessEnabledRec = tree.find("onlineAccessEnabled")
             if ( (onlineAccessEnabledRec is not None) and 
-                 (len(onlineAccessEnabledRec) > 0) ):
+                 (len(onlineAccessEnabledRec.text.strip()) > 0) ):
                 onlineAccessEnabled = onlineAccessEnabledRec.text.strip()
 
             drivePerformanceMonitoringEnabledRec = tree.find(
                 "drivePerformanceMonitoringEnabled")
             if ( (drivePerformanceMonitoringEnabledRec is not None) and
-                 (len(drivePerformanceMonitoringEnabledRec) > 0) ):
+                 (len(drivePerformanceMonitoringEnabledRec.text.strip()) > 0) ):
                 drivePerformanceMonitoringEnabled = drivePerformanceMonitoringEnabledRec.text.strip()
 
             automaticPowerUpAfterPowerFailureEnabledRec = tree.find(
                 "automaticPowerUpAfterPowerFailureEnabled")
             if ( (automaticPowerUpAfterPowerFailureEnabledRec is not None) and
-                 (len(automaticPowerUpAfterPowerFailureEnabledRec) > 0) ):
+                 (len(automaticPowerUpAfterPowerFailureEnabledRec.text.strip()) > 0) ):
                 automaticPowerUpAfterPowerFailureEnabled = automaticPowerUpAfterPowerFailureEnabledRec.text.strip()
 
             community = trapCommunity = trapDescription = trapIPAddress = ""

@@ -5574,7 +5574,7 @@ def main():
             print("Cannot access configfile " + args.configfile, file=sys.stderr)
             sys.exit(1)
 
-        cfgparser = configparser.ConfigParser()
+        cfgparser = configparser.ConfigParser(allow_no_value=True)
         cfgparser.read(args.configfile)
 
         try:
@@ -5589,6 +5589,9 @@ def main():
             if args.passwd is None:
                 if config.get("password"):
                     args.passwd = config["password"]
+                if "password" in config.keys():
+                    if config["password"] is None or config["password"] == "":
+                        args.passwd = ""
             if args.insecure is None or args.insecure == False:
                 if config.get("insecure"):
                     args.insecure = config.getboolean("insecure")
@@ -5609,7 +5612,7 @@ def main():
             raise(Exception("Error: SERVER not specified"))
         if args.user is None or args.user == "":
             raise(Exception("Error: USER not specified"))
-        if args.passwd is None or args.passwd == "":
+        if args.passwd is None:
             raise(Exception("Error: PASSWD not specified"))
     except Exception as e:
         print(str(e))

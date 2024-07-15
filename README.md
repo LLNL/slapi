@@ -42,12 +42,12 @@ Keys that are not specified in named sections will fall back to the key in `[DEF
 The following keys are supported in each section:
 | Key      | Notes |
 | -------- | ----- |
+| username | REQUIRED. <br>On CLI, this is `--user`. |
+| password | REQUIRED. <br>Allowed to be empty (but the key must still be present). <br>The escape character is `%`, so a percent sign in your password will need to be escaped as `%%`. |
 | server   | Does NOT override `--server`, so it's best to not specify this outside of `[DEFAULT]`. |
-| port     | |
-| insecure | true or false. Communicate with library over http:// instead of https:// |
-| username | On CLI, this is `--user` |
-| password | Allowed to be empty (but the key must still be present). The escape character is `%`, so a percent sign in your password will need to be escaped as `%%`. |
-| verbose  | true or false. |
+| port     | Port on which to communicate with the library. <br>Default is 443, or 80 if `insecure=true`. |
+| insecure | Communicate with the library over http:// instead of https://. <br>`true` or `false`; defaults to `false` (use https://). |
+| verbose  | Increase the verbosity for the output. <br>`true` or `false`. |
 
 Comments are allowed, the comment prefix is `#`.
 
@@ -66,6 +66,7 @@ insecure = true
 username = su
 password = supersecret!
 ```
+In this example, library _theoneweneveruse_ will also use insecure (http://) communications, because it inherits the `insecure` key from `[DEFAULT]` (as well as the `verbose` key).
 
 Documentation
 ----------------

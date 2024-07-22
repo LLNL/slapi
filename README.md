@@ -30,6 +30,44 @@ repository enabled.  Our RHEL7-based systems have python34 installed.
     Install  1 Package (+5 Dependent packages)
     <snip>
 
+Configuration files
+----------------
+
+Unless overridden by `--config`, SLAPI will pick up a system-wide configuration file in `/etc/slapi.conf` or a user-specific configuration file in `~/.slapi/slapi.conf`.
+
+The configuration file is a simple INI file. If you specify `--server`, the section with that exact same name will be read; if you do not specify a server, the `[DEFAULT]` section will be read instead and the `server` key in that section will be used. Do not specify `server` in named sections; it will not override what you pass on the CLI.
+
+Keys that are not specified in named sections will fall back to the key in `[DEFAULT]` if present there.
+
+The following keys are supported in each section:
+| Key      | Notes |
+| -------- | ----- |
+| username | REQUIRED. <br>On CLI, this is `--user`. |
+| password | REQUIRED. <br>Allowed to be empty (but the key must still be present). <br>The escape character is `%`, so a percent sign in your password will need to be escaped as `%%`. |
+| server   | Does NOT override `--server`, so it's best to not specify this outside of `[DEFAULT]`. |
+| port     | Port on which to communicate with the library. <br>Default is 443, or 80 if `insecure=true`. |
+| insecure | Communicate with the library over http:// instead of https://. <br>`true` or `false`; defaults to `false` (use https://). |
+| verbose  | Increase the verbosity for the output. <br>`true` or `false`. |
+
+Comments are allowed, the comment prefix is `#`.
+
+Here is a sample configuration file with two libraries:
+
+``` INI
+[DEFAULT]
+server = tfinity01.mydomain.com
+username = su
+# % escaped as %%
+password = ThisPwdHasOnlyOne%%.
+verbose = false
+insecure = true
+
+[theoneweneveruse.mydomain.com]
+username = su
+password = supersecret!
+```
+In this example, library _theoneweneveruse_ will also use insecure (http://) communications, because it inherits the `insecure` key from `[DEFAULT]` (as well as the `verbose` key).
+
 Documentation
 ----------------
 

@@ -5208,7 +5208,7 @@ def main():
                            help='Configuration file for Spectra Logic API.')
 
     cmdparser.add_argument('--server', '-s', dest='server',
-                           required=True,
+                           required=False,
                            help='Hostname/IP Address of Spectra Logic Library.')
 
     cmdparser.add_argument('--port', '-P', dest='port',
@@ -5583,6 +5583,9 @@ def main():
             config = cfgparser["DEFAULT"]
 
         try:
+            if args.server is None:
+                if config.get("server"):
+                    args.server = config["server"]
             if args.user is None:
                 if config.get("username"):
                     args.user   = config["username"]

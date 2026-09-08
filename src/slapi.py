@@ -1165,6 +1165,7 @@ class SpectraLogicAPI:
             api_instance = lumosapi_client.TFinityApi(api_client)   
                                                                                 
             api_response = api_instance.abort_move(task_id)
+            print(api_response)
             abort_task_id = api_response.task_id
             
     def robotservice(self, robot=None, action=None, wait=True):
@@ -1845,6 +1846,8 @@ def main():
     move_subparser = move_parser.add_subparsers(title="subcommands", dest="subcommand")
     move_abort_parser = move_subparser.add_parser('abort',  
         help='Abort a move that is in progress.')
+    move_abort_parser.add_argument('taskid', action='store',
+        help='Taskid of task to abort.')
     move_start_parser = move_subparser.add_parser('start',
         help='Start a move.')
     move_start_parser.add_argument('partition', action='store',

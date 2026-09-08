@@ -1167,12 +1167,6 @@ class SpectraLogicAPI:
             api_response = api_instance.abort_move(task_id)
             abort_task_id = api_response.task_id
             
-            if wait == True:
-                self.taskwait(task_id=task_id, timeout=1800, operation="move abort") # timeout=30 mins
-                print(f"Move abort succeeded.")
-            else:
-                print(f"Move abort started. TaskId: {abort_task_id}")
-
     def robotservice(self, robot=None, action=None, wait=True):
 
         # Enter a context with an instance of the API client
@@ -1848,15 +1842,18 @@ def main():
 
     move_parser = cmdsubparsers.add_parser('move',
         help='Move tape cartridges around the library.')
-    move_parser.add_argument('partition', action='store',
-        help='Library partition to use for the move.')
-    move_parser.add_argument('sourcebarcode', action='store',
-        help='Source barcode for tape cartridge.')
-    move_parser.add_argument('destination', action='store',
-        type=int,
-        help='Destination location to move tape cartridge to.')
+    move_subparser = move_parser.add_subparsers(title="subcommands", dest="subcommand")
     move_abort_parser = move_subparser.add_parser('abort',  
         help='Abort a move that is in progress.')
+    move_start_parser = move_subparser.add_parser('start',
+        help='Start a move.')
+    move_start_parser.add_argument('partition', action='store',
+        help='Library partition to use for the move.')
+    move_start_parser.add_argument('sourcebarcode', action='store',
+        help='Source barcode for tape cartridge.')
+    move_start_parser.add_argument('destination', action='store',
+        type=int,
+        help='Destination location to move tape cartridge to.')
     package_parser = cmdsubparsers.add_parser('package',
         help='package command help.')
     package_subparser = package_parser.add_subparsers(title="subcommands", dest="subcommand")
@@ -2084,10 +2081,11 @@ def main():
                 slapi.messages()
             elif args.command == "mlmlist":
                 slapi.mlmlist()
-            elif args.command == "abort":
-                slapi.moveabort(task_id=args.task_id)
             elif args.command == "move":
-                slapi.move(partition=args.partition, sourcebarcode=args.sourcebarcode, destination=args.destination, wait=args.wait)
+                if args.subcommand == "abort":
+                    slapi.moveabort(task_id=args.task_id)
+                elif args.subcommand == "start":
+                    slapi.move(partition=args.partition, sourcebarcode=args.sourcebarcode, destination=args.destination, wait=args.wait)
             elif args.command == "package":
                 if args.subcommand is None or args.subcommand == "list":
                     slapi.packagelist()

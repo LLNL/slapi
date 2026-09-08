@@ -1167,6 +1167,9 @@ class SpectraLogicAPI:
             api_response = api_instance.abort_move(task_id)
             print(api_response)
             abort_task_id = api_response.task_id
+
+            if abort_task_id == task_id:
+                print("Move abort was successfull")
             
     def robotservice(self, robot=None, action=None, wait=True):
 

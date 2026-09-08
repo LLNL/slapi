@@ -1158,7 +1158,7 @@ class SpectraLogicAPI:
             else:
                 print(f"Media move for {sourcebarcode} started. TaskId: {task_id}")
 
-    def moveabort(self, taskid):
+    def moveabort(self, task_id):
         # Enter a context with an instance of the API client                    
         with lumosapi_client.ApiClient(self.configuration) as api_client:
             # Create an instance of the API class                               
@@ -1846,7 +1846,7 @@ def main():
     move_subparser = move_parser.add_subparsers(title="subcommands", dest="subcommand")
     move_abort_parser = move_subparser.add_parser('abort',  
         help='Abort a move that is in progress.')
-    move_abort_parser.add_argument('taskid', action='store',
+    move_abort_parser.add_argument('task_id', action='store',
         help='Taskid of task to abort.')
     move_start_parser = move_subparser.add_parser('start',
         help='Start a move.')

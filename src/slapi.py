@@ -1164,6 +1164,17 @@ class SpectraLogicAPI:
             else:
                 print(f"Media move for {sourcebarcode} started. TaskId: {task_id}")
 
+    def moveabort(self, task_id):
+        # Enter a context with an instance of the API client                    
+        with lumosapi_client.ApiClient(self.configuration) as api_client:
+            # Create an instance of the API class                               
+            api_instance = lumosapi_client.TFinityApi(api_client)   
+                                                                                
+            api_response = api_instance.abort_move(task_id)
+            abort_task_id = api_response.task_id
+
+            print(f'Move abort for {task_id} was successfull')
+            
     def robotservice(self, robot=None, action=None, wait=True):
 
         # Enter a context with an instance of the API client
@@ -1847,6 +1858,22 @@ def main():
         type=int,
         help='Destination location to move tape cartridge to.')
 
+    move_subparser = move_parser.add_subparsers(title="subcommands", dest="subcommand")
+    move_abort_parser = move_subparser.add_parser('abort',  
+        help='Abort a move that is in progress.')
+    move_abort_parser.add_argument('task_id', action='store',
+        help='Taskid of task to abort.')
+
+    #move_start_parser = move_subparser.add_parser('start',
+    #    help='Start a move.')
+    #move_start_parser.add_argument('partition', action='store',
+    #    help='Library partition to use for the move.')
+    #move_start_parser.add_argument('sourcebarcode', action='store',
+    #    help='Source barcode for tape cartridge.')
+    #move_start_parser.add_argument('destination', action='store',
+    #    type=int,
+    #    help='Destination location to move tape cartridge to.')
+
     package_parser = cmdsubparsers.add_parser('package',
         help='package command help.')
     package_subparser = package_parser.add_subparsers(title="subcommands", dest="subcommand")
@@ -2075,7 +2102,12 @@ def main():
             elif args.command == "mlmlist":
                 slapi.mlmlist()
             elif args.command == "move":
-                slapi.move(partition=args.partition, sourcebarcode=args.sourcebarcode, destination=args.destination, wait=args.wait)
+                if args.subcommand == "abort":
+                    slapi.moveabort(task_id=args.task_id)
+                elif args.subcommand == None:
+                    slapi.move(partition=args.partition, sourcebarcode=args.sourcebarcode, destination=args.destination, wait=args.wait)
+                else:
+                    raise(Exception(f"move: Unknown option {args.subcommand}"))
             elif args.command == "package":
                 if args.subcommand is None or args.subcommand == "list":
                     slapi.packagelist()
